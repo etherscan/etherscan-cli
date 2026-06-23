@@ -86,12 +86,3 @@ etherscan proxy eth_sendRawTransaction --hex 0x...
 ```
 
 The CLI never accepts private keys or seed phrases.
-
-## Verification
-
-```sh
-go build ./...
-go vet ./...
-go test ./... -race
-golangci-lint run
-```
