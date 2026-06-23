@@ -13,16 +13,13 @@ etherscan stats ethprice
 etherscan proxy eth_blockNumber
 ```
 
-```sh
-etherscan account txlist 0xSender --to 0xRecipient --fromto-opr and
-etherscan account tokentx 0xAddr --from 0xA --to 0xB --fromto-opr or
-```
 
-## Login
+## Auth
 
 ```sh
 etherscan login
 etherscan whoami
+etherscan logout
 ```
 
 ## Output
