@@ -143,7 +143,7 @@ func endpointCommand(state *globalState, spec EndpointSpec) *cobra.Command {
 	for _, param := range spec.Params {
 		cmd.Flags().String(flagName(param.Name), "", param.Usage)
 	}
-	if spec.Post || spec.Action == "verifysourcecode" {
+	if spec.Action == "verifysourcecode" {
 		cmd.Flags().StringVar(&state.file, "file", "", "read source/payload content from file")
 	}
 	return cmd
@@ -188,7 +188,7 @@ func runtime(state *globalState) (resolvedRuntime, error) {
 		return resolvedRuntime{}, err
 	}
 	baseURL := firstNonEmpty(state.baseURL, os.Getenv("ETHERSCAN_BASE_URL"), cfg.BaseURL, client.DefaultBaseURL)
-	if !strings.HasPrefix(baseURL, "https://") && baseURL != client.DefaultBaseURL {
+	if !strings.HasPrefix(baseURL, "https://") {
 		fmt.Fprintf(os.Stderr, "warning: non-HTTPS base URL: %s\n", baseURL)
 	}
 	format := output.Format(firstNonEmpty(outputFlag(state), cfg.DefaultOutput, "table"))
@@ -244,7 +244,10 @@ func runAllPages(ctx context.Context, rt resolvedRuntime, spec EndpointSpec, par
 	if !reachedEnd {
 		fmt.Fprintf(os.Stderr, "warning: stopped at --max-pages=%d (%d rows); results may be truncated. Increase --max-pages or narrow --startblock/--endblock.\n", limit, len(combined))
 	}
-	raw, _ := json.Marshal(combined)
+	raw, err := json.Marshal(combined)
+	if err != nil {
+		return err
+	}
 	return output.Write(os.Stdout, raw, rt.format, false, spec.Columns)
 }
 
@@ -281,11 +284,17 @@ func loginCommand(state *globalState) *cobra.Command {
 			}
 			cfg.BaseURL = baseURL
 			cfg.DefaultChain = chain.Name
-			config.StoreAPIKey(key, &cfg)
-			if _, err := config.Save(cfg); err != nil {
+			storage := config.StoreAPIKey(key, &cfg)
+			path, err := config.Save(cfg)
+			if err != nil {
 				return err
 			}
-			fmt.Fprintf(os.Stdout, "API Key saved! Key: %s\n", maskKey(key))
+			if storage == "keyring" {
+				fmt.Fprintf(os.Stdout, "API Key saved to OS keyring! Key: %s\n", maskKey(key))
+			} else {
+				fmt.Fprintf(os.Stderr, "warning: OS keyring unavailable; API key stored as plaintext in %s\n", path)
+				fmt.Fprintf(os.Stdout, "API Key saved! Key: %s\n", maskKey(key))
+			}
 			return nil
 		},
 	}
@@ -646,11 +655,4 @@ func flagName(name string) string {
 func atoi(value string) int {
 	n, _ := strconv.Atoi(value)
 	return n
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

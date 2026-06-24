@@ -217,7 +217,7 @@ func formatTableCell(column, value string) string {
 		return value
 	}
 	switch strings.ToLower(column) {
-	case "timestamp", "timestampunix", "time_stamp", "timeStamp":
+	case "timestamp", "timestampunix", "time_stamp":
 		if unix, err := strconv.ParseInt(trimmed, 10, 64); err == nil && unix > 946684800 && unix < 4102444800 {
 			return time.Unix(unix, 0).UTC().Format(time.RFC3339)
 		}
