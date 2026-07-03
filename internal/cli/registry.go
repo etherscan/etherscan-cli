@@ -88,7 +88,6 @@ func endpoints() []EndpointSpec {
 		{Module: "token", Action: "tokenholderlist", Use: "tokenholderlist <contract>", Short: "List token holders", Params: []ParamSpec{arg("contractaddress", "token contract", KindAddress), p("page", "page number", KindUint), p("offset", "page size", KindUint)}, Paginated: true},
 		{Module: "token", Action: "tokenholdercount", Use: "tokenholdercount <contract>", Short: "Get token holder count", Params: []ParamSpec{arg("contractaddress", "token contract", KindAddress)}},
 		{Module: "token", Action: "topholders", Use: "topholders <contract>", Short: "Get top holders", Params: []ParamSpec{arg("contractaddress", "token contract", KindAddress), p("offset", "limit", KindUint)}},
-		{Module: "token", Action: "tokenlist", Use: "tokenlist", Short: "List tokens", Params: []ParamSpec{p("page", "page number", KindUint), p("offset", "page size", KindUint)}, Paginated: true},
 	}
 	stats := statsEndpoints()
 	proxy := proxyEndpoints()
@@ -105,7 +104,7 @@ func endpoints() []EndpointSpec {
 }
 
 func statsEndpoints() []EndpointSpec {
-	series := []string{"ethdailyprice", "ethdailymarketcap", "dailytx", "dailynewaddress", "dailyavgblocksize", "dailyavgblocktime", "dailyavggasprice", "dailyavggaslimit", "dailygasused", "dailyblockrewards", "dailyblkcount", "dailytxnfee", "dailynetutilization", "dailyuncleblkcount", "dailyavghashrate", "dailyavgnetdifficulty", "dailyensregister", "nodecounthistory"}
+	series := []string{"ethdailyprice", "dailytx", "dailynewaddress", "dailyavgblocksize", "dailyavgblocktime", "dailyavggasprice", "dailyavggaslimit", "dailygasused", "dailyblockrewards", "dailyblkcount", "dailytxnfee", "dailynetutilization", "dailyuncleblkcount", "dailyavghashrate", "dailyavgnetdifficulty", "dailyensregister", "nodecounthistory"}
 	out := []EndpointSpec{
 		{Module: "stats", Action: "ethsupply", Use: "ethsupply", Short: "Get ETH supply"},
 		{Module: "stats", Action: "ethsupply2", Use: "ethsupply2", Short: "Get extended ETH supply", MainnetOnly: true},
