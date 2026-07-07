@@ -89,6 +89,9 @@ func endpoints() []EndpointSpec {
 		{Module: "token", Action: "tokenholdercount", Use: "tokenholdercount <contract>", Short: "Get token holder count", Params: []ParamSpec{arg("contractaddress", "token contract", KindAddress)}},
 		{Module: "token", Action: "topholders", Use: "topholders <contract>", Short: "Get top holders", Params: []ParamSpec{arg("contractaddress", "token contract", KindAddress), p("offset", "limit", KindUint)}},
 	}
+	nametag := []EndpointSpec{
+		{Module: "nametag", Action: "getaddresstag", Use: "getaddresstag <addr1,addr2,...>", Short: "Get address name tags and metadata (Pro Plus)", Params: []ParamSpec{argAddresses("address", 100)}, Columns: []string{"address", "nametag", "labels", "reputation"}},
+	}
 	stats := statsEndpoints()
 	proxy := proxyEndpoints()
 	out := append(account, contract...)
@@ -98,6 +101,7 @@ func endpoints() []EndpointSpec {
 	out = append(out, stats...)
 	out = append(out, token...)
 	out = append(out, gas...)
+	out = append(out, nametag...)
 	out = append(out, proxy...)
 	out = append(out, EndpointSpec{Module: "getapilimit", Action: "getapilimit", Use: "apilimit", Short: "Show API credit usage", Columns: []string{"creditsUsed", "creditsAvailable", "creditLimit", "limitInterval", "intervalExpiryTimespan"}})
 	return out

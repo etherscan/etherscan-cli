@@ -71,7 +71,11 @@ func ValidateCommaAddresses(name, value string, max int) error {
 		return fmt.Errorf("%s accepts at most %d addresses", name, max)
 	}
 	for _, part := range parts {
-		if err := ValidateAddress(name, strings.TrimSpace(part)); err != nil {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			return fmt.Errorf("%s must not contain empty entries", name)
+		}
+		if err := ValidateAddress(name, part); err != nil {
 			return err
 		}
 	}

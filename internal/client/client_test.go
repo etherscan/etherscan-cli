@@ -24,6 +24,7 @@ func TestEnvelopeDecodeVariants(t *testing.T) {
 		{"empty-blank-result", `{"status":"0","message":"No transactions found","result":""}`, true, false},
 		{"error", `{"status":"0","message":"NOTOK","result":"Invalid API Key"}`, false, true},
 		{"error-blank-result", `{"status":"0","message":"NOTOK","result":""}`, false, true},
+		{"rate-limit", `{"status":"0","message":"NOTOK","result":"Max rate limit reached, please use API Key for higher rate limit"}`, false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -36,6 +37,32 @@ func TestEnvelopeDecodeVariants(t *testing.T) {
 			}
 			if got.Empty != tt.empty {
 				t.Fatalf("empty=%v, want %v", got.Empty, tt.empty)
+			}
+		})
+	}
+}
+
+func TestEnvelopeErrorMessageVerbatim(t *testing.T) {
+	// Etherscan's documented error message lives in the `result` field. It must be surfaced
+	// verbatim: no "NOTOK" status-word prefix and no leftover JSON quotes.
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"rate-limit", `{"status":"0","message":"NOTOK","result":"Max rate limit reached, please use API Key for higher rate limit"}`, "Max rate limit reached, please use API Key for higher rate limit"},
+		{"verification", `{"status":"0","message":"NOTOK","result":"Unable to locate ContractCode at 0x123"}`, "Unable to locate ContractCode at 0x123"},
+		{"invalid-key", `{"status":"0","message":"NOTOK","result":"Invalid API Key"}`, "Invalid API Key"},
+		{"blank-result-falls-back", `{"status":"0","message":"NOTOK","result":""}`, "NOTOK"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := decodeEnvelope([]byte(tc.body))
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if err.Error() != tc.want {
+				t.Fatalf("message = %q, want %q", err.Error(), tc.want)
 			}
 		})
 	}
@@ -96,6 +123,21 @@ func TestValidators(t *testing.T) {
 		"0x0000000000000000000000000000000000000001",
 	}, ","), 1); err == nil {
 		t.Fatal("expected max list error")
+	}
+	if err := ValidateCommaAddresses("addresses", strings.Join([]string{
+		"0x0000000000000000000000000000000000000000",
+		"0x0000000000000000000000000000000000000001",
+	}, ","), 20); err != nil {
+		t.Fatalf("valid address list rejected: %v", err)
+	}
+	for _, bad := range []string{
+		"0x0000000000000000000000000000000000000000,",
+		"0x0000000000000000000000000000000000000000,,0x0000000000000000000000000000000000000001",
+		",",
+	} {
+		if err := ValidateCommaAddresses("addresses", bad, 20); err == nil {
+			t.Fatalf("expected empty-entry error for %q", bad)
+		}
 	}
 	if err := ValidateDate("startdate", "2026-06-19"); err != nil {
 		t.Fatal(err)

@@ -45,7 +45,7 @@ type globalState struct {
 }
 
 func NewRootCommand(info BuildInfo) *cobra.Command {
-	state := &globalState{timeout: 30 * time.Second, rate: 5, maxPages: 20}
+	state := &globalState{timeout: 30 * time.Second, rate: 3, maxPages: 20}
 	root := &cobra.Command{
 		Use:           "etherscan",
 		Short:         "Command-line client for the Etherscan V2 API",
@@ -60,7 +60,7 @@ func NewRootCommand(info BuildInfo) *cobra.Command {
 	root.PersistentFlags().BoolVar(&state.compact, "compact", false, "compact JSON output")
 	root.PersistentFlags().BoolVar(&state.csv, "csv", false, "print result as CSV")
 	root.PersistentFlags().DurationVar(&state.timeout, "timeout", 30*time.Second, "request timeout")
-	root.PersistentFlags().Float64Var(&state.rate, "rate-limit", 5, "client-side request rate limit per second")
+	root.PersistentFlags().Float64Var(&state.rate, "rate-limit", 3, "client-side request rate limit per second (free-tier API V2 default; raise for higher tiers)")
 	root.PersistentFlags().BoolVarP(&state.verbose, "verbose", "v", false, "log request URL and timing to stderr")
 	root.PersistentFlags().BoolVar(&state.debug, "debug", false, "dump raw response bodies to stderr")
 	root.PersistentFlags().BoolVar(&state.yes, "yes", false, "skip confirmation for sensitive submit actions")

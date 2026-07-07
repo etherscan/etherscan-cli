@@ -29,7 +29,7 @@ func TestEndpointRegistryCoversPromptModules(t *testing.T) {
 	for _, spec := range endpoints() {
 		got[spec.Module]++
 	}
-	for _, module := range []string{"account", "contract", "transaction", "block", "proxy", "logs", "stats", "token", "gastracker", "getapilimit"} {
+	for _, module := range []string{"account", "contract", "transaction", "block", "proxy", "logs", "stats", "token", "gastracker", "nametag", "getapilimit"} {
 		if got[module] == 0 {
 			t.Fatalf("missing module %s", module)
 		}

@@ -89,7 +89,7 @@ func New(opts Options) *Client {
 		opts.HTTPClient = &http.Client{Timeout: opts.Timeout}
 	}
 	if opts.RateLimit <= 0 {
-		opts.RateLimit = 5
+		opts.RateLimit = 3
 	}
 	return &Client{
 		baseURL: strings.TrimRight(opts.BaseURL, "/"),
@@ -220,9 +220,17 @@ func decodeEnvelope(raw []byte) (Result, error) {
 	if isEmptyMessage(env.Message) || isEmptyResult(env.Result) {
 		return Result{Raw: []byte("[]"), Envelope: &env, Empty: true}, nil
 	}
-	result := strings.TrimSpace(string(env.Result))
-	if result != "" && result != "null" {
-		return Result{}, fmt.Errorf("%s: %s", env.Message, result)
+	// Surface Etherscan's documented error message (the `result` field) verbatim: it is the
+	// canonical, self-guiding string (e.g. "Max rate limit reached, please use API Key for higher
+	// rate limit", "Unable to locate ContractCode at 0x..."). `env.Result` is raw JSON, so unquote
+	// the normal string case and don't prefix it with the "NOTOK" status word.
+	var msg string
+	if json.Unmarshal(env.Result, &msg) != nil {
+		msg = string(env.Result)
+	}
+	msg = strings.TrimSpace(msg)
+	if msg != "" && msg != "null" {
+		return Result{}, errors.New(msg)
 	}
 	return Result{}, errors.New(env.Message)
 }

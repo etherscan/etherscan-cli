@@ -2,7 +2,7 @@
 
 A cross-platform Go CLI for the Etherscan V2 API.
 
-`etherscan` wraps the API surface described in the official Etherscan docs, with commands for accounts, tokens, contracts, logs, gas, stats, proxy/RPC-style endpoints, API limits, and multi-chain queries.
+`etherscan` wraps the API surface described in the official Etherscan docs, with commands for accounts, tokens, contracts, logs, gas, stats, address name tags, proxy/RPC-style endpoints, API limits, and multi-chain queries.
 
 ## Installation
 
@@ -55,6 +55,12 @@ etherscan contract getabi 0x...
 etherscan contract getsourcecode 0x...
 etherscan contract verify 0x... --file Contract.sol --codeformat solidity-single-file --contractname Contract --compilerversion v0.8.24+commit.e11b9ed9
 etherscan logs get --address 0x... --from-block 0 --to-block latest
+```
+
+Address name tags (Pro Plus):
+
+```sh
+etherscan nametag getaddresstag 0x...,0x...
 ```
 
 API usage:
