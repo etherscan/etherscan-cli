@@ -81,6 +81,31 @@ func TestRPCDecode(t *testing.T) {
 	}
 }
 
+func TestRPCDecodeEnvelopeError(t *testing.T) {
+	// Pre-dispatch guard errors (rate limit, invalid key, unsupported chainid, throttle) reach
+	// proxy endpoints in the standard Etherscan envelope, not JSON-RPC. decodeRPC must surface
+	// them verbatim as errors, matching decodeEnvelope, instead of returning them as a result.
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"invalid-key", `{"status":"0","message":"NOTOK","result":"Invalid API Key (#err2)"}`, "Invalid API Key (#err2)"},
+		{"rate-limit", `{"status":"0","message":"NOTOK","result":"Max rate limit reached, please use API Key for higher rate limit"}`, "Max rate limit reached, please use API Key for higher rate limit"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := decodeRPC([]byte(tc.body))
+			if err == nil {
+				t.Fatal("expected error, got nil (envelope error leaked as success)")
+			}
+			if err.Error() != tc.want {
+				t.Fatalf("message = %q, want %q", err.Error(), tc.want)
+			}
+		})
+	}
+}
+
 func TestClientBuildsRedactedV2Request(t *testing.T) {
 	var seen string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

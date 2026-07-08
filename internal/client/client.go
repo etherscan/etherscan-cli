@@ -236,6 +236,19 @@ func decodeEnvelope(raw []byte) (Result, error) {
 }
 
 func decodeRPC(raw []byte) (Result, error) {
+	// Rate-limit / invalid-key / unsupported-chainid / throttle checks run BEFORE the proxy
+	// module is dispatched server-side, so they arrive as the standard Etherscan envelope
+	// ({"status","message","result"}) rather than JSON-RPC — over HTTP 200. Detect that shape
+	// (has "status", no "jsonrpc") and reuse decodeEnvelope so the error surfaces correctly
+	// instead of being returned as a successful result.
+	var probe struct {
+		JSONRPC string `json:"jsonrpc"`
+		Status  string `json:"status"`
+	}
+	if json.Unmarshal(raw, &probe) == nil && probe.JSONRPC == "" && probe.Status != "" {
+		return decodeEnvelope(raw)
+	}
+
 	var rpc RPCResponse
 	if err := json.Unmarshal(raw, &rpc); err != nil {
 		return Result{}, err
