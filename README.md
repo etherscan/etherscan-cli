@@ -49,10 +49,11 @@ Common output flags:
 
 API keys are resolved in this order:
 
-1. `--api-key`
-2. `ETHERSCAN_API_KEY`
-3. OS keyring, saved by `etherscan login`
-4. Plaintext config fallback
+1. `--api-key` (alias `--apikey`) — a key for a single command
+2. `ETHERSCAN_API_KEY` environment variable
+3. The config file (`~/.etherscan/config.toml`), saved by `etherscan login`
+
+`etherscan uninstall` removes the config directory entirely (key and settings).
 
 Supported config keys:
 

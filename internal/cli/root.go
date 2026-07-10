@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/etherscan/etherscan-cli/internal/client"
 	"github.com/etherscan/etherscan-cli/internal/config"
 	"github.com/etherscan/etherscan-cli/internal/output"
+	"github.com/etherscan/etherscan-cli/internal/tui"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -51,8 +53,20 @@ func NewRootCommand(info BuildInfo) *cobra.Command {
 		Short:         "Command-line client for the Etherscan V2 API",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		Args:          cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// A bare invocation at an interactive terminal opens the explorer; when
+			// piped/redirected (agents, scripts, CI) it prints a plain text splash so
+			// nothing hangs waiting for keypresses.
+			if interactiveTTY() {
+				return launchTUI(cmd.Context(), state, info)
+			}
+			printSplash(cmd.OutOrStdout(), info)
+			return nil
+		},
 	}
-	root.PersistentFlags().StringVar(&state.apiKey, "api-key", "", "API key; prefer ETHERSCAN_API_KEY or login for regular use")
+	root.PersistentFlags().StringVar(&state.apiKey, "api-key", "", "API key for this command (overrides login/ETHERSCAN_API_KEY)")
+	root.PersistentFlags().StringVar(&state.apiKey, "apikey", "", "alias for --api-key")
 	root.PersistentFlags().StringVar(&state.chain, "chain", "", "chain name or chainid")
 	root.PersistentFlags().StringVar(&state.baseURL, "base-url", "", "API base URL")
 	root.PersistentFlags().StringVarP(&state.out, "output", "o", "", "output format: table, json, csv")
@@ -66,9 +80,9 @@ func NewRootCommand(info BuildInfo) *cobra.Command {
 	root.PersistentFlags().BoolVar(&state.yes, "yes", false, "skip confirmation for sensitive submit actions")
 	root.PersistentFlags().BoolVar(&state.all, "all", false, "auto-paginate list commands")
 	root.PersistentFlags().IntVar(&state.maxPages, "max-pages", 20, "maximum pages for --all")
-	hideFlags(root, "api-key", "base-url", "compact", "max-pages", "rate-limit", "timeout", "verbose", "debug", "yes")
+	hideFlags(root, "apikey", "base-url", "compact", "max-pages", "rate-limit", "timeout", "verbose", "debug", "yes")
 
-	root.AddCommand(loginCommand(state), logoutCommand(state), configCommand(state), chainsCommand(), whoamiCommand(state), versionCommand(info), completionCommand(root))
+	root.AddCommand(loginCommand(state), logoutCommand(state), uninstallCommand(state), configCommand(state), chainsCommand(), whoamiCommand(state), versionCommand(info), tuiCommand(state, info), completionCommand(root))
 	addEndpointCommands(root, state)
 	return root
 }
@@ -284,17 +298,12 @@ func loginCommand(state *globalState) *cobra.Command {
 			}
 			cfg.BaseURL = baseURL
 			cfg.DefaultChain = chain.Name
-			storage := config.StoreAPIKey(key, &cfg)
+			config.StoreAPIKey(key, &cfg)
 			path, err := config.Save(cfg)
 			if err != nil {
 				return err
 			}
-			if storage == "keyring" {
-				fmt.Fprintf(os.Stdout, "API Key saved to OS keyring! Key: %s\n", maskKey(key))
-			} else {
-				fmt.Fprintf(os.Stderr, "warning: OS keyring unavailable; API key stored as plaintext in %s\n", path)
-				fmt.Fprintf(os.Stdout, "API Key saved! Key: %s\n", maskKey(key))
-			}
+			fmt.Fprintf(os.Stdout, "API Key saved to %s! Key: %s\n", path, maskKey(key))
 			return nil
 		},
 	}
@@ -320,6 +329,40 @@ func logoutCommand(state *globalState) *cobra.Command {
 			}
 			if os.Getenv("ETHERSCAN_API_KEY") != "" {
 				fmt.Fprintln(os.Stderr, "note: ETHERSCAN_API_KEY is still set and overrides stored keys; unset it in your shell to fully sign out.")
+			}
+			return nil
+		},
+	}
+}
+
+func uninstallCommand(state *globalState) *cobra.Command {
+	return &cobra.Command{
+		Use:   "uninstall",
+		Short: "Remove all etherscan CLI configuration (API key and settings)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path, err := config.DefaultPath()
+			if err != nil {
+				return err
+			}
+			dir := filepath.Dir(path)
+			if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
+				fmt.Fprintln(os.Stdout, "Nothing to remove; no configuration found.")
+				return nil
+			} else if err != nil {
+				return err
+			}
+			if !state.yes {
+				if err := confirm(cmd.Context(), fmt.Sprintf("Remove all configuration in %s?", dir)); err != nil {
+					return err
+				}
+			}
+			if err := os.RemoveAll(dir); err != nil {
+				return err
+			}
+			fmt.Fprintf(os.Stdout, "Removed %s\n", dir)
+			if os.Getenv("ETHERSCAN_API_KEY") != "" {
+				fmt.Fprintln(os.Stderr, "note: ETHERSCAN_API_KEY is still set in your environment; unset it in your shell to fully remove the key.")
 			}
 			return nil
 		},
@@ -424,6 +467,129 @@ func versionCommand(info BuildInfo) *cobra.Command {
 	return &cobra.Command{Use: "version", Short: "Print version", Run: func(cmd *cobra.Command, args []string) {
 		fmt.Fprintln(os.Stdout, info.Version)
 	}}
+}
+
+func tuiCommand(state *globalState, info BuildInfo) *cobra.Command {
+	return &cobra.Command{
+		Use:   "tui",
+		Short: "Launch the interactive explorer",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !interactiveTTY() {
+				return errors.New("tui requires an interactive terminal")
+			}
+			return launchTUI(cmd.Context(), state, info)
+		},
+	}
+}
+
+// interactiveTTY reports whether both stdin (for keypresses) and stdout (for the
+// screen) are terminals. The TUI needs both; if either is redirected/piped we
+// fall back to the text splash so nothing hangs against a non-interactive stream.
+func interactiveTTY() bool {
+	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
+}
+
+// launchTUI resolves the runtime once and hands the interactive explorer the
+// endpoint list plus an executor that reuses the existing client/call path.
+func launchTUI(ctx context.Context, state *globalState, info BuildInfo) error {
+	rt, err := runtime(state)
+	if err != nil {
+		return err
+	}
+	cfg, _, _ := config.Load()
+	key, _ := config.GetAPIKey(cfg)
+	if state.apiKey != "" {
+		key = state.apiKey
+	}
+	keyLabel := "none"
+	if key != "" {
+		keyLabel = maskKey(key)
+	}
+	eps, index := tuiEndpoints()
+	return tui.Run(ctx, tui.Config{
+		Endpoints: eps,
+		Exec:      tuiExec(rt, index),
+		ChainName: rt.chain.Name,
+		ChainID:   rt.chain.ID,
+		KeyLabel:  keyLabel,
+	})
+}
+
+// tuiExec builds the explorer's executor. It applies the SAME pre-call guards as
+// the normal CLI path (endpointCommand RunE) — the mainnet-only check and
+// validateParams — before issuing the request, so the TUI cannot bypass the
+// validation the CLI enforces (e.g. empty comma-list entries).
+func tuiExec(rt resolvedRuntime, index map[string]EndpointSpec) tui.Exec {
+	return func(ctx context.Context, module, action string, params map[string]string) (json.RawMessage, error) {
+		spec, ok := index[module+"/"+action]
+		if !ok {
+			return nil, fmt.Errorf("unknown endpoint %s/%s", module, action)
+		}
+		if spec.MainnetOnly && !chains.IsMainnetID(rt.chain.ID) {
+			return nil, fmt.Errorf("%s/%s is only supported on Ethereum mainnet", spec.Module, spec.Action)
+		}
+		if err := validateParams(spec, params); err != nil {
+			return nil, err
+		}
+		res, err := call(ctx, rt.client, spec, params)
+		if err != nil {
+			return nil, err
+		}
+		return res.Raw, nil
+	}
+}
+
+// tuiEndpoints adapts the registry into the tui package's own types, excluding
+// write/sensitive actions so the explorer stays read-only. It returns the
+// browsable list plus an index for the executor to look specs up by module/action.
+func tuiEndpoints() ([]tui.Endpoint, map[string]EndpointSpec) {
+	var list []tui.Endpoint
+	index := map[string]EndpointSpec{}
+	for _, spec := range endpoints() {
+		if spec.Post || spec.Sensitive {
+			continue
+		}
+		var params []tui.Param
+		for _, pr := range spec.Params {
+			label := pr.Usage
+			if label == "" {
+				label = pr.Name
+			}
+			params = append(params, tui.Param{Name: pr.Name, Label: label, Required: pr.Required})
+		}
+		title := spec.Action
+		if f := strings.Fields(spec.Use); len(f) > 0 {
+			title = f[0]
+		}
+		list = append(list, tui.Endpoint{
+			Module:    spec.Module,
+			Action:    spec.Action,
+			Title:     title,
+			Desc:      spec.Short,
+			Params:    params,
+			Columns:   spec.Columns,
+			Paginated: spec.Paginated,
+		})
+		index[spec.Module+"/"+spec.Action] = spec
+	}
+	return list, index
+}
+
+// printSplash is shown on a bare `etherscan` invocation: a short branded banner
+// with a few example commands and a pointer to full help, instead of dumping the
+// entire auto-generated command tree.
+func printSplash(w io.Writer, info BuildInfo) {
+	fmt.Fprintf(w, "Etherscan CLI %s\n", info.Version)
+	fmt.Fprintln(w, "Command-line client for the Etherscan V2 API.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Examples:")
+	fmt.Fprintln(w, "  etherscan login")
+	fmt.Fprintln(w, "  etherscan account balance 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045")
+	fmt.Fprintln(w, "  etherscan gastracker oracle")
+	fmt.Fprintln(w, "  etherscan --chain base account balance 0xADDRESS --json")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Run 'etherscan --help' to see all commands.")
 }
 
 // checkKeyShape fast-fails a key containing whitespace (a clear paste mistake) before

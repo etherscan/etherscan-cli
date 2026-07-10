@@ -7,11 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/BurntSushi/toml"
-	"github.com/zalando/go-keyring"
 )
-
-const serviceName = "etherscan-cli"
-const keyringAccount = "default"
 
 type File struct {
 	APIKey        string `toml:"api_key,omitempty"`
@@ -72,36 +68,26 @@ func GetAPIKey(fallback File) (string, string) {
 	if key := os.Getenv("ETHERSCAN_API_KEY"); key != "" {
 		return key, "env"
 	}
-	if key, err := keyring.Get(serviceName, keyringAccount); err == nil && key != "" {
-		return key, "keyring"
-	}
 	if fallback.APIKey != "" {
 		return fallback.APIKey, "config"
 	}
 	return "", ""
 }
 
-func StoreAPIKey(key string, cfg *File) string {
-	if err := keyring.Set(serviceName, keyringAccount, key); err == nil {
-		cfg.APIKey = ""
-		return "keyring"
-	}
+// StoreAPIKey records the key in the config struct. It is persisted to the
+// plaintext config file by a subsequent Save.
+func StoreAPIKey(key string, cfg *File) {
 	cfg.APIKey = key
-	return "config"
 }
 
-// DeleteAPIKey removes the stored key from both the OS keyring and any plaintext
-// fallback in the config file. It cannot affect the ETHERSCAN_API_KEY env var.
+// DeleteAPIKey removes the stored key from the config file. It cannot affect the
+// ETHERSCAN_API_KEY env var.
 func DeleteAPIKey(cfg *File) bool {
-	removed := false
-	if err := keyring.Delete(serviceName, keyringAccount); err == nil {
-		removed = true
-	}
 	if cfg.APIKey != "" {
 		cfg.APIKey = ""
-		removed = true
+		return true
 	}
-	return removed
+	return false
 }
 
 func Redact(value string) string {

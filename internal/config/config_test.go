@@ -4,7 +4,7 @@ import "testing"
 
 func TestDeleteAPIKeyClearsPlaintext(t *testing.T) {
 	cfg := File{APIKey: "PLAINTEXTKEY"}
-	// No keyring entry exists in test, so removal is driven by the plaintext clear.
+	// The key is stored plaintext in the config file; removal clears that field.
 	if !DeleteAPIKey(&cfg) {
 		t.Fatal("expected DeleteAPIKey to report a removed key")
 	}
