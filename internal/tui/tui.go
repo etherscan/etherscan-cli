@@ -482,26 +482,43 @@ func (m model) footer(keys string) string {
 }
 
 func (m model) viewBrowse() string {
+	// Height budget. The view is join(header, "", banner, "", body, "", footer):
+	// banner + body + 5 chrome lines, and each panel adds 4 lines (heading, blank,
+	// two border rows) around its list. The banner gets priority: it is sized
+	// against a fixed minimum list height — NOT the selected module's endpoint
+	// count — so it never flickers between big and compact while moving across
+	// modules. The lists are then windowed into whatever remains, because Bubble
+	// Tea trims an overflowing view from the top — which would eat the header first.
+	const chromeRows = 5
+	const panelRows = 4
+	const minListRows = 5
+	eps := m.endpointsForSelected()
+	banner := renderBanner(m.width, m.height-chromeRows-panelRows-minListRows)
+	visible := m.height - chromeRows - panelRows - lipgloss.Height(banner)
+	if visible < 3 {
+		visible = 3
+	}
+
 	// Modules panel.
 	var mod strings.Builder
 	mod.WriteString(headSt.Render("MODULES") + "\n\n")
-	for i, name := range m.modules {
-		line := name
+	mStart, mEnd := windowIndices(len(m.modules), visible, m.modIdx)
+	for i := mStart; i < mEnd; i++ {
+		name := m.modules[i]
+		line := itemSt.Render("  " + name)
 		if i == m.modIdx {
 			if m.focus == focusModules {
 				line = selSt.Render(" " + name + " ")
 			} else {
 				line = labelSt.Render("▸ " + name)
 			}
-		} else {
-			line = itemSt.Render("  " + name)
 		}
 		mod.WriteString(line + "\n")
 	}
-	modPanel := panelSt.Width(18).Render(strings.TrimRight(mod.String(), "\n"))
+	modLines := markTruncation(strings.TrimRight(mod.String(), "\n"), len(m.modules), mStart, mEnd)
+	modPanel := panelSt.Width(18).Render(modLines)
 
 	// Endpoints panel.
-	eps := m.endpointsForSelected()
 	var ep strings.Builder
 	ep.WriteString(headSt.Render("ENDPOINTS · "+strings.ToUpper(m.selectedModule())) + "\n\n")
 	nameW := 0
@@ -510,7 +527,9 @@ func (m model) viewBrowse() string {
 			nameW = len(e.Title)
 		}
 	}
-	for i, e := range eps {
+	eStart, eEnd := windowIndices(len(eps), visible, m.epIdx)
+	for i := eStart; i < eEnd; i++ {
+		e := eps[i]
 		name := padRight(e.Title, nameW+2)
 		row := name + descSt.Render(e.Desc)
 		if m.focus == focusEndpoints && i == m.epIdx {
@@ -518,16 +537,45 @@ func (m model) viewBrowse() string {
 		}
 		ep.WriteString(row + "\n")
 	}
+	epLines := markTruncation(strings.TrimRight(ep.String(), "\n"), len(eps), eStart, eEnd)
 	epW := m.width - lipgloss.Width(modPanel) - 4
 	if epW < 20 {
 		epW = 20
 	}
-	epPanel := panelSt.Width(epW).Render(strings.TrimRight(ep.String(), "\n"))
+	epPanel := panelSt.Width(epW).Render(epLines)
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top, modPanel, " ", epPanel)
-	banner := renderBanner(m.width, m.height)
 	foot := m.footer("↑/↓ move · ←/→ pane · enter open · esc/q quit")
 	return join(m.header(), "", banner, "", body, "", foot)
+}
+
+// windowIndices returns the [start, end) slice of a total-item list that fits in
+// visible rows while keeping idx in view, biased to centre the selection.
+func windowIndices(total, visible, idx int) (int, int) {
+	if total <= visible {
+		return 0, total
+	}
+	start := clamp(idx-visible/2, 0, total-visible)
+	return start, start + visible
+}
+
+// markTruncation replaces the first/last rendered list row with a dim "… N more"
+// marker when the window hides items above/below. The selection never occupies
+// those rows: windowIndices centres it, so an edge row is selected only when the
+// window is flush against that end of the list (i.e. nothing is hidden there).
+func markTruncation(list string, total, start, end int) string {
+	if start == 0 && end == total {
+		return list
+	}
+	lines := strings.Split(list, "\n")
+	// The first two lines are the panel heading and its blank spacer.
+	if start > 0 && len(lines) > 2 {
+		lines[2] = descSt.Render(fmt.Sprintf("  … %d above", start))
+	}
+	if end < total && len(lines) > 2 {
+		lines[len(lines)-1] = descSt.Render(fmt.Sprintf("  … %d more", total-end))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m model) viewForm() string {

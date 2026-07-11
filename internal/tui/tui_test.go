@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -162,31 +163,136 @@ func TestBannerArtSane(t *testing.T) {
 }
 
 func TestRenderBannerBigForm(t *testing.T) {
-	out := renderBanner(bannerWidth+10, minLandingHeight+10)
+	out := renderBanner(bannerWidth+10, bigBannerRows)
 	if !strings.ContainsAny(out, blockRunes) {
 		t.Fatalf("big banner missing block art: %q", out)
 	}
 	if !strings.Contains(out, bannerTagline) {
 		t.Fatalf("big banner missing tagline: %q", out)
 	}
-	if lines := strings.Count(out, "\n") + 1; lines < bannerHeight {
-		t.Fatalf("big banner has %d lines, want >= %d", lines, bannerHeight)
+	if lines := strings.Count(out, "\n") + 1; lines != bigBannerRows {
+		t.Fatalf("big banner has %d lines, want %d (bigBannerRows)", lines, bigBannerRows)
 	}
 }
 
 func TestRenderBannerFallback(t *testing.T) {
-	// Too narrow, and too short: both must drop to the compact one-liner so the
-	// landing is never blank and the panels stay on screen.
-	for _, tc := range []struct{ w, h int }{
-		{40, minLandingHeight + 10},              // narrow
-		{bannerWidth + 10, minLandingHeight - 1}, // short
+	// Too narrow, and too small a row budget: both must drop to the compact
+	// one-liner so the banner never pushes the panels (or header) off-screen.
+	for _, tc := range []struct{ w, rows int }{
+		{40, bigBannerRows + 10},              // narrow
+		{bannerWidth + 10, bigBannerRows - 1}, // budget one row too small
+		{bannerWidth + 10, 0},                 // no budget at all
 	} {
-		out := renderBanner(tc.w, tc.h)
+		out := renderBanner(tc.w, tc.rows)
 		if strings.ContainsAny(out, blockRunes) {
-			t.Fatalf("fallback (w=%d h=%d) should not contain block art: %q", tc.w, tc.h, out)
+			t.Fatalf("fallback (w=%d rows=%d) should not contain block art: %q", tc.w, tc.rows, out)
 		}
 		if !strings.Contains(out, "Etherscan") || !strings.Contains(out, bannerTagline) {
-			t.Fatalf("fallback (w=%d h=%d) missing wordmark/tagline: %q", tc.w, tc.h, out)
+			t.Fatalf("fallback (w=%d rows=%d) missing wordmark/tagline: %q", tc.w, tc.rows, out)
+		}
+		if lines := strings.Count(out, "\n") + 1; lines != 1 {
+			t.Fatalf("compact banner should be one line, got %d", lines)
+		}
+	}
+}
+
+// TestBrowseViewFitsTerminal guards the header-trimmed-off-screen bug: the browse
+// view must never render more lines than the terminal has, at any height, because
+// Bubble Tea trims an overflowing view from the top — deleting the header first.
+func TestBrowseViewFitsTerminal(t *testing.T) {
+	// One big module (mirrors account's 19 endpoints) and one small one.
+	eps := make([]Endpoint, 0, 20)
+	for i := 0; i < 19; i++ {
+		eps = append(eps, Endpoint{Module: "account", Action: fmt.Sprintf("action%02d", i),
+			Title: fmt.Sprintf("action%02d", i), Desc: "desc"})
+	}
+	eps = append(eps, Endpoint{Module: "stats", Action: "ethprice", Title: "ethprice"})
+	m := newModel(context.Background(), Config{Endpoints: eps, ChainName: "ethereum", ChainID: "1", KeyLabel: "none"})
+
+	for _, h := range []int{15, 20, 25, 30, 34, 37, 40, 50} {
+		m.Update(tea.WindowSizeMsg{Width: 120, Height: h})
+		out := m.View()
+		if lines := strings.Count(out, "\n") + 1; lines > h {
+			t.Fatalf("height %d: view is %d lines — header would be trimmed off-screen", h, lines)
+		}
+		first := strings.SplitN(out, "\n", 2)[0]
+		if !strings.Contains(first, "Etherscan") {
+			t.Fatalf("height %d: first line is not the header: %q", h, first)
+		}
+	}
+}
+
+// TestBrowseWindowKeepsSelectionVisible: with more endpoints than fit, the list is
+// windowed around the selection and truncation is marked.
+func TestBrowseWindowKeepsSelectionVisible(t *testing.T) {
+	eps := make([]Endpoint, 0, 19)
+	for i := 0; i < 19; i++ {
+		eps = append(eps, Endpoint{Module: "account", Action: fmt.Sprintf("action%02d", i),
+			Title: fmt.Sprintf("action%02d", i), Desc: "desc"})
+	}
+	m := newModel(context.Background(), Config{Endpoints: eps, ChainName: "ethereum", ChainID: "1", KeyLabel: "none"})
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 20})
+	m.focus = focusEndpoints
+	m.epIdx = 18
+	out := m.View()
+	if !strings.Contains(out, "action18") {
+		t.Fatal("selected endpoint not visible in windowed list")
+	}
+	if !strings.Contains(out, "above") {
+		t.Fatal("expected an '… N above' truncation marker")
+	}
+	if lines := strings.Count(out, "\n") + 1; lines > 20 {
+		t.Fatalf("view is %d lines, exceeds terminal height 20", lines)
+	}
+}
+
+// TestBannerStableAcrossModules guards the "logo disappears on some modules" bug:
+// the banner must not change form when moving the selection between a long module
+// (account, 19 endpoints) and a short one (stats) — the logo has priority and the
+// lists window themselves into the remaining space instead.
+func TestBannerStableAcrossModules(t *testing.T) {
+	var eps []Endpoint
+	for i := 0; i < 19; i++ {
+		eps = append(eps, Endpoint{Module: "account", Action: fmt.Sprintf("a%02d", i), Title: fmt.Sprintf("a%02d", i)})
+	}
+	for i := 0; i < 8; i++ {
+		eps = append(eps, Endpoint{Module: "stats", Action: fmt.Sprintf("s%02d", i), Title: fmt.Sprintf("s%02d", i)})
+	}
+	for _, h := range []int{20, 26, 30, 36, 44} {
+		m := newModel(context.Background(), Config{Endpoints: eps, ChainName: "ethereum", ChainID: "1", KeyLabel: "none"})
+		m.Update(tea.WindowSizeMsg{Width: 120, Height: h})
+		m.modIdx = 0 // account
+		accountArt := strings.ContainsAny(m.View(), blockRunes)
+		m.modIdx = 1 // stats
+		statsArt := strings.ContainsAny(m.View(), blockRunes)
+		if accountArt != statsArt {
+			t.Fatalf("height %d: banner form differs between modules (account art=%v, stats art=%v)", h, accountArt, statsArt)
+		}
+		if h >= 26 && !statsArt {
+			t.Fatalf("height %d: expected the big logo (fits with windowed lists)", h)
+		}
+		for _, out := range []string{m.View()} {
+			if lines := strings.Count(out, "\n") + 1; lines > h {
+				t.Fatalf("height %d: view is %d lines", h, lines)
+			}
+		}
+	}
+}
+
+func TestWindowIndices(t *testing.T) {
+	for _, tc := range []struct{ total, visible, idx, wantStart, wantEnd int }{
+		{5, 10, 0, 0, 5},    // fits entirely
+		{19, 10, 0, 0, 10},  // top
+		{19, 10, 18, 9, 19}, // bottom
+		{19, 10, 9, 4, 14},  // centred
+	} {
+		start, end := windowIndices(tc.total, tc.visible, tc.idx)
+		if start != tc.wantStart || end != tc.wantEnd {
+			t.Fatalf("windowIndices(%d,%d,%d) = %d,%d want %d,%d",
+				tc.total, tc.visible, tc.idx, start, end, tc.wantStart, tc.wantEnd)
+		}
+		if tc.idx < start || tc.idx >= end {
+			t.Fatalf("selection %d outside window [%d,%d)", tc.idx, start, end)
 		}
 	}
 }

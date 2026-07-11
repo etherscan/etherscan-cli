@@ -42,16 +42,17 @@ func bannerBlockWidth() int {
 	return w
 }
 
-// minLandingHeight is the terminal height below which the big banner is dropped in
-// favour of the compact one-line wordmark, so the modules/endpoints panels stay on
-// screen on short terminals.
-const minLandingHeight = 34
+// bigBannerRows is the number of lines the full banner occupies: the block art
+// plus a blank line and the tagline.
+var bigBannerRows = bannerHeight + 2
 
-// renderBanner returns the landing wordmark. On a terminal both wide and tall
-// enough it returns the full pixel-art logo painted in the accent colour;
-// otherwise it returns a compact one-line fallback so the banner is never blank.
-func renderBanner(width, height int) string {
-	if width >= bannerWidth && height >= minLandingHeight {
+// renderBanner returns the landing wordmark. rows is the line budget the caller
+// has left for the banner after accounting for everything else on screen: when
+// the terminal is wide enough and the full art fits the budget it returns the
+// pixel-art logo painted in the accent colour; otherwise a compact one-line
+// fallback so the banner is never blank and never pushes the rest off-screen.
+func renderBanner(width, rows int) string {
+	if width >= bannerWidth && rows >= bigBannerRows {
 		lines := make([]string, len(bannerLogo))
 		for i, row := range bannerLogo {
 			lines[i] = logoSt.Render(row)

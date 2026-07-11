@@ -47,6 +47,10 @@ Common output flags:
 
 ## Configuration and API Keys
 
+An API key is required for all API commands. Get a free key at
+[etherscan.io/apis](https://etherscan.io/apis). Without one, API commands exit with an
+error, and the interactive explorer opens a one-time setup screen to save your key.
+
 API keys are resolved in this order:
 
 1. `--api-key` (alias `--apikey`) — a key for a single command

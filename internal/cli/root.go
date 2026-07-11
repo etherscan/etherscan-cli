@@ -187,14 +187,29 @@ type resolvedRuntime struct {
 	chain  chains.Chain
 }
 
+// errNoAPIKey is returned by runtime() when no key is resolved. An API key is
+// required: keyless requests are throttled server-side to ~1 req/3s and fail with
+// confusing NOTOK errors, so the CLI fails fast with the fix in the message instead.
+var errNoAPIKey = errors.New("no API key configured; run 'etherscan login' or set ETHERSCAN_API_KEY")
+
+// resolveKey returns the effective API key: the --api-key flag wins, then the
+// env > config precedence implemented by config.GetAPIKey.
+func resolveKey(state *globalState, cfg config.File) string {
+	if state.apiKey != "" {
+		return state.apiKey
+	}
+	key, _ := config.GetAPIKey(cfg)
+	return key
+}
+
 func runtime(state *globalState) (resolvedRuntime, error) {
 	cfg, _, err := config.Load()
 	if err != nil {
 		return resolvedRuntime{}, err
 	}
-	key, _ := config.GetAPIKey(cfg)
-	if state.apiKey != "" {
-		key = state.apiKey
+	key := resolveKey(state, cfg)
+	if key == "" {
+		return resolvedRuntime{}, errNoAPIKey
 	}
 	chainInput := firstNonEmpty(state.chain, os.Getenv("ETHERSCAN_CHAIN"), cfg.DefaultChain, "ethereum")
 	chain, err := chains.Resolve(chainInput)
@@ -265,6 +280,16 @@ func runAllPages(ctx context.Context, rt resolvedRuntime, spec EndpointSpec, par
 	return output.Write(os.Stdout, raw, rt.format, false, spec.Columns)
 }
 
+// validateKeyLive checks a key against the API (getapilimit) before it is saved,
+// so a typo'd key is rejected at login/setup time rather than on first use.
+func validateKeyLive(ctx context.Context, state *globalState, key, chainID, baseURL string) error {
+	validator := client.New(client.Options{BaseURL: baseURL, APIKey: key, ChainID: chainID, Timeout: state.timeout, RateLimit: state.rate})
+	if _, err := validator.Get(ctx, "getapilimit", "getapilimit", nil, false); err != nil {
+		return fmt.Errorf("API key validation failed: %w", err)
+	}
+	return nil
+}
+
 func loginCommand(state *globalState) *cobra.Command {
 	return &cobra.Command{
 		Use:   "login",
@@ -292,9 +317,8 @@ func loginCommand(state *globalState) *cobra.Command {
 				return err
 			}
 			baseURL := firstNonEmpty(state.baseURL, cfg.BaseURL, client.DefaultBaseURL)
-			validator := client.New(client.Options{BaseURL: baseURL, APIKey: key, ChainID: chain.ID, Timeout: state.timeout, RateLimit: state.rate})
-			if _, err := validator.Get(cmd.Context(), "getapilimit", "getapilimit", nil, false); err != nil {
-				return fmt.Errorf("API key validation failed: %w", err)
+			if err := validateKeyLive(cmd.Context(), state, key, chain.ID, baseURL); err != nil {
+				return err
 			}
 			cfg.BaseURL = baseURL
 			cfg.DefaultChain = chain.Name
@@ -491,19 +515,26 @@ func interactiveTTY() bool {
 }
 
 // launchTUI resolves the runtime once and hands the interactive explorer the
-// endpoint list plus an executor that reuses the existing client/call path.
+// endpoint list plus an executor that reuses the existing client/call path. With
+// no key resolved it runs the first-launch setup screen first; a key saved there
+// lands in the config file, so the runtime resolution below picks it up.
 func launchTUI(ctx context.Context, state *globalState, info BuildInfo) error {
+	cfg, _, err := config.Load()
+	if err != nil {
+		return err
+	}
+	if resolveKey(state, cfg) == "" {
+		if err := runSetup(ctx, state); err != nil {
+			return err
+		}
+		cfg, _, _ = config.Load()
+	}
 	rt, err := runtime(state)
 	if err != nil {
 		return err
 	}
-	cfg, _, _ := config.Load()
-	key, _ := config.GetAPIKey(cfg)
-	if state.apiKey != "" {
-		key = state.apiKey
-	}
 	keyLabel := "none"
-	if key != "" {
+	if key := resolveKey(state, cfg); key != "" {
 		keyLabel = maskKey(key)
 	}
 	eps, index := tuiEndpoints()
@@ -514,6 +545,45 @@ func launchTUI(ctx context.Context, state *globalState, info BuildInfo) error {
 		ChainID:   rt.chain.ID,
 		KeyLabel:  keyLabel,
 	})
+}
+
+// runSetup runs the TUI first-launch key screen. Its Save closure applies the
+// same shape check, live validation, and persistence as `etherscan login`, so a
+// key accepted here behaves identically to one saved via login.
+func runSetup(ctx context.Context, state *globalState) error {
+	save := func(ctx context.Context, key string) error {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			return errors.New("empty API key")
+		}
+		if err := checkKeyShape(key); err != nil {
+			return err
+		}
+		cfg, _, err := config.Load()
+		if err != nil {
+			return err
+		}
+		chain, err := chains.Resolve(firstNonEmpty(state.chain, cfg.DefaultChain, "ethereum"))
+		if err != nil {
+			return err
+		}
+		baseURL := firstNonEmpty(state.baseURL, cfg.BaseURL, client.DefaultBaseURL)
+		if err := validateKeyLive(ctx, state, key, chain.ID, baseURL); err != nil {
+			return err
+		}
+		cfg.BaseURL = baseURL
+		cfg.DefaultChain = chain.Name
+		config.StoreAPIKey(key, &cfg)
+		_, err = config.Save(cfg)
+		return err
+	}
+	if err := tui.RunSetup(ctx, tui.SetupConfig{Save: save}); err != nil {
+		if errors.Is(err, tui.ErrSetupAborted) {
+			return errNoAPIKey
+		}
+		return err
+	}
+	return nil
 }
 
 // tuiExec builds the explorer's executor. It applies the SAME pre-call guards as
