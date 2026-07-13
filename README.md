@@ -85,135 +85,135 @@ If `--all` reaches `--max-pages`, the result may be truncated.
 <!-- BEGIN GENERATED COMMAND INDEX -->
 ### Account
 
-| Command | Description | API documentation |
-| --- | --- | --- |
-| `etherscan account balance` | Get native balance | [balance](https://docs.etherscan.io/api-reference/endpoint/balance.md) |
-| `etherscan account balancemulti` | Get native balances for multiple addresses | [balancemulti](https://docs.etherscan.io/api-reference/endpoint/balancemulti.md) |
-| `etherscan account txlist` | List normal transactions | [txlist](https://docs.etherscan.io/api-reference/endpoint/txlist.md), [advanced-filter-txlist](https://docs.etherscan.io/api-reference/endpoint/advanced-filter-txlist.md) |
-| `etherscan account txlistinternal` | List internal transactions | [txlistinternal](https://docs.etherscan.io/api-reference/endpoint/txlistinternal.md), [txlistinternal-blockrange](https://docs.etherscan.io/api-reference/endpoint/txlistinternal-blockrange.md), [txlistinternal-txhash](https://docs.etherscan.io/api-reference/endpoint/txlistinternal-txhash.md), [advanced-filter-txlistinternal](https://docs.etherscan.io/api-reference/endpoint/advanced-filter-txlistinternal.md) |
-| `etherscan account tokentx` | List ERC-20 transfers | [tokentx](https://docs.etherscan.io/api-reference/endpoint/tokentx.md), [advanced-filter-tokentx](https://docs.etherscan.io/api-reference/endpoint/advanced-filter-tokentx.md) |
-| `etherscan account tokennfttx` | List ERC-721 transfers | [tokennfttx](https://docs.etherscan.io/api-reference/endpoint/tokennfttx.md), [advanced-filter-tokennfttx](https://docs.etherscan.io/api-reference/endpoint/advanced-filter-tokennfttx.md) |
-| `etherscan account token1155tx` | List ERC-1155 transfers | [token1155tx](https://docs.etherscan.io/api-reference/endpoint/token1155tx.md), [advanced-filter-token1155tx](https://docs.etherscan.io/api-reference/endpoint/advanced-filter-token1155tx.md) |
-| `etherscan account getminedblocks` | List mined blocks | [getminedblocks](https://docs.etherscan.io/api-reference/endpoint/getminedblocks.md) |
-| `etherscan account balancehistory` | Get native balance at block | [balancehistory](https://docs.etherscan.io/api-reference/endpoint/balancehistory.md) |
-| `etherscan account tokenbalance` | Get ERC-20 token balance | [tokenbalance](https://docs.etherscan.io/api-reference/endpoint/tokenbalance.md) |
-| `etherscan account tokenbalancehistory` | Get token balance at block | [tokenbalancehistory](https://docs.etherscan.io/api-reference/endpoint/tokenbalancehistory.md) |
-| `etherscan account addresstokenbalance` | List ERC-20 holdings | [addresstokenbalance](https://docs.etherscan.io/api-reference/endpoint/addresstokenbalance.md) |
-| `etherscan account addresstokennftbalance` | List NFT holdings | [addresstokennftbalance](https://docs.etherscan.io/api-reference/endpoint/addresstokennftbalance.md) |
-| `etherscan account addresstokennftinventory` | List NFT inventory | [addresstokennftinventory](https://docs.etherscan.io/api-reference/endpoint/addresstokennftinventory.md) |
-| `etherscan account getdeposittxs` | List L2 deposits | [getdeposittxs](https://docs.etherscan.io/api-reference/endpoint/getdeposittxs.md) |
-| `etherscan account getwithdrawaltxs` | List L2 withdrawals | [getwithdrawaltxs](https://docs.etherscan.io/api-reference/endpoint/getwithdrawaltxs.md) |
-| `etherscan account txsBeaconWithdrawal` | List beacon withdrawals | [txsbeaconwithdrawal](https://docs.etherscan.io/api-reference/endpoint/txsbeaconwithdrawal.md) |
-| `etherscan account fundedby` | Get likely funder | [fundedby](https://docs.etherscan.io/api-reference/endpoint/fundedby.md) |
-| `etherscan account txnbridge` | List bridge transactions | [txnbridge](https://docs.etherscan.io/api-reference/endpoint/txnbridge.md) |
+| Command | API documentation |
+| --- | --- |
+| `etherscan account balance` | [balance](https://docs.etherscan.io/api-reference/endpoint/balance.md) |
+| `etherscan account balancemulti` | [balancemulti](https://docs.etherscan.io/api-reference/endpoint/balancemulti.md) |
+| `etherscan account txlist` | [txlist](https://docs.etherscan.io/api-reference/endpoint/txlist.md), [advanced-filter-txlist](https://docs.etherscan.io/api-reference/endpoint/advanced-filter-txlist.md) |
+| `etherscan account txlistinternal` | [txlistinternal](https://docs.etherscan.io/api-reference/endpoint/txlistinternal.md), [txlistinternal-blockrange](https://docs.etherscan.io/api-reference/endpoint/txlistinternal-blockrange.md), [txlistinternal-txhash](https://docs.etherscan.io/api-reference/endpoint/txlistinternal-txhash.md), [advanced-filter-txlistinternal](https://docs.etherscan.io/api-reference/endpoint/advanced-filter-txlistinternal.md) |
+| `etherscan account tokentx` | [tokentx](https://docs.etherscan.io/api-reference/endpoint/tokentx.md), [advanced-filter-tokentx](https://docs.etherscan.io/api-reference/endpoint/advanced-filter-tokentx.md) |
+| `etherscan account tokennfttx` | [tokennfttx](https://docs.etherscan.io/api-reference/endpoint/tokennfttx.md), [advanced-filter-tokennfttx](https://docs.etherscan.io/api-reference/endpoint/advanced-filter-tokennfttx.md) |
+| `etherscan account token1155tx` | [token1155tx](https://docs.etherscan.io/api-reference/endpoint/token1155tx.md), [advanced-filter-token1155tx](https://docs.etherscan.io/api-reference/endpoint/advanced-filter-token1155tx.md) |
+| `etherscan account getminedblocks` | [getminedblocks](https://docs.etherscan.io/api-reference/endpoint/getminedblocks.md) |
+| `etherscan account balancehistory` | [balancehistory](https://docs.etherscan.io/api-reference/endpoint/balancehistory.md) |
+| `etherscan account tokenbalance` | [tokenbalance](https://docs.etherscan.io/api-reference/endpoint/tokenbalance.md) |
+| `etherscan account tokenbalancehistory` | [tokenbalancehistory](https://docs.etherscan.io/api-reference/endpoint/tokenbalancehistory.md) |
+| `etherscan account addresstokenbalance` | [addresstokenbalance](https://docs.etherscan.io/api-reference/endpoint/addresstokenbalance.md) |
+| `etherscan account addresstokennftbalance` | [addresstokennftbalance](https://docs.etherscan.io/api-reference/endpoint/addresstokennftbalance.md) |
+| `etherscan account addresstokennftinventory` | [addresstokennftinventory](https://docs.etherscan.io/api-reference/endpoint/addresstokennftinventory.md) |
+| `etherscan account getdeposittxs` | [getdeposittxs](https://docs.etherscan.io/api-reference/endpoint/getdeposittxs.md) |
+| `etherscan account getwithdrawaltxs` | [getwithdrawaltxs](https://docs.etherscan.io/api-reference/endpoint/getwithdrawaltxs.md) |
+| `etherscan account txsBeaconWithdrawal` | [txsbeaconwithdrawal](https://docs.etherscan.io/api-reference/endpoint/txsbeaconwithdrawal.md) |
+| `etherscan account fundedby` | [fundedby](https://docs.etherscan.io/api-reference/endpoint/fundedby.md) |
+| `etherscan account txnbridge` | [txnbridge](https://docs.etherscan.io/api-reference/endpoint/txnbridge.md) |
 
 ### Contract
 
-| Command | Description | API documentation |
-| --- | --- | --- |
-| `etherscan contract getabi` | Get contract ABI | [getabi](https://docs.etherscan.io/api-reference/endpoint/getabi.md) |
-| `etherscan contract getsourcecode` | Get contract source metadata | [getsourcecode](https://docs.etherscan.io/api-reference/endpoint/getsourcecode.md) |
-| `etherscan contract getcontractcreation` | Get contract creation data | [getcontractcreation](https://docs.etherscan.io/api-reference/endpoint/getcontractcreation.md) |
-| `etherscan contract verify` | Submit source verification | [verifysourcecode](https://docs.etherscan.io/api-reference/endpoint/verifysourcecode.md) |
-| `etherscan contract verify-status` | Check verification status | [checkverifystatus](https://docs.etherscan.io/api-reference/endpoint/checkverifystatus.md) |
-| `etherscan contract verify-proxy` | Submit proxy verification | [verifyproxycontract](https://docs.etherscan.io/api-reference/endpoint/verifyproxycontract.md) |
-| `etherscan contract check-proxy` | Check proxy verification | [checkproxyverification](https://docs.etherscan.io/api-reference/endpoint/checkproxyverification.md) |
+| Command | API documentation |
+| --- | --- |
+| `etherscan contract getabi` | [getabi](https://docs.etherscan.io/api-reference/endpoint/getabi.md) |
+| `etherscan contract getsourcecode` | [getsourcecode](https://docs.etherscan.io/api-reference/endpoint/getsourcecode.md) |
+| `etherscan contract getcontractcreation` | [getcontractcreation](https://docs.etherscan.io/api-reference/endpoint/getcontractcreation.md) |
+| `etherscan contract verify` | [verifysourcecode](https://docs.etherscan.io/api-reference/endpoint/verifysourcecode.md) |
+| `etherscan contract verify-status` | [checkverifystatus](https://docs.etherscan.io/api-reference/endpoint/checkverifystatus.md) |
+| `etherscan contract verify-proxy` | [verifyproxycontract](https://docs.etherscan.io/api-reference/endpoint/verifyproxycontract.md) |
+| `etherscan contract check-proxy` | [checkproxyverification](https://docs.etherscan.io/api-reference/endpoint/checkproxyverification.md) |
 
 ### Transaction
 
-| Command | Description | API documentation |
-| --- | --- | --- |
-| `etherscan transaction status` | Get transaction execution status | [getstatus](https://docs.etherscan.io/api-reference/endpoint/getstatus.md) |
-| `etherscan transaction receipt-status` | Get transaction receipt status | [gettxreceiptstatus](https://docs.etherscan.io/api-reference/endpoint/gettxreceiptstatus.md) |
+| Command | API documentation |
+| --- | --- |
+| `etherscan transaction status` | [getstatus](https://docs.etherscan.io/api-reference/endpoint/getstatus.md) |
+| `etherscan transaction receipt-status` | [gettxreceiptstatus](https://docs.etherscan.io/api-reference/endpoint/gettxreceiptstatus.md) |
 
 ### Block
 
-| Command | Description | API documentation |
-| --- | --- | --- |
-| `etherscan block reward` | Get block reward | [getblockreward](https://docs.etherscan.io/api-reference/endpoint/getblockreward.md) |
-| `etherscan block countdown` | Get block countdown | [getblockcountdown](https://docs.etherscan.io/api-reference/endpoint/getblockcountdown.md) |
-| `etherscan block txcount` | Get block transaction count | [getblocktxnscount](https://docs.etherscan.io/api-reference/endpoint/getblocktxnscount.md) |
-| `etherscan block bytime` | Find block by timestamp | [getblocknobytime](https://docs.etherscan.io/api-reference/endpoint/getblocknobytime.md) |
+| Command | API documentation |
+| --- | --- |
+| `etherscan block reward` | [getblockreward](https://docs.etherscan.io/api-reference/endpoint/getblockreward.md) |
+| `etherscan block countdown` | [getblockcountdown](https://docs.etherscan.io/api-reference/endpoint/getblockcountdown.md) |
+| `etherscan block txcount` | [getblocktxnscount](https://docs.etherscan.io/api-reference/endpoint/getblocktxnscount.md) |
+| `etherscan block bytime` | [getblocknobytime](https://docs.etherscan.io/api-reference/endpoint/getblocknobytime.md) |
 
 ### Logs
 
-| Command | Description | API documentation |
-| --- | --- | --- |
-| `etherscan logs get` | Query event logs | [getlogs](https://docs.etherscan.io/api-reference/endpoint/getlogs.md), [getlogs-address-topics](https://docs.etherscan.io/api-reference/endpoint/getlogs-address-topics.md), [getlogs-topics](https://docs.etherscan.io/api-reference/endpoint/getlogs-topics.md) |
+| Command | API documentation |
+| --- | --- |
+| `etherscan logs get` | [getlogs](https://docs.etherscan.io/api-reference/endpoint/getlogs.md), [getlogs-address-topics](https://docs.etherscan.io/api-reference/endpoint/getlogs-address-topics.md), [getlogs-topics](https://docs.etherscan.io/api-reference/endpoint/getlogs-topics.md) |
 
 ### Stats
 
-| Command | Description | API documentation |
-| --- | --- | --- |
-| `etherscan stats ethsupply` | Get ETH supply | [ethsupply](https://docs.etherscan.io/api-reference/endpoint/ethsupply.md) |
-| `etherscan stats ethsupply2` | Get extended ETH supply | [ethsupply2](https://docs.etherscan.io/api-reference/endpoint/ethsupply2.md) |
-| `etherscan stats ethprice` | Get ETH price | [ethprice](https://docs.etherscan.io/api-reference/endpoint/ethprice.md) |
-| `etherscan stats chainsize` | Get chain size | [chainsize](https://docs.etherscan.io/api-reference/endpoint/chainsize.md) |
-| `etherscan stats nodecount` | Get node count | [nodecount](https://docs.etherscan.io/api-reference/endpoint/nodecount.md) |
-| `etherscan stats tokensupply` | Get token supply | [tokensupply](https://docs.etherscan.io/api-reference/endpoint/tokensupply.md) |
-| `etherscan stats tokensupplyhistory` | Get token supply at block | [tokensupplyhistory](https://docs.etherscan.io/api-reference/endpoint/tokensupplyhistory.md) |
-| `etherscan stats ethdailyprice` | Get ethdailyprice series | [ethdailyprice](https://docs.etherscan.io/api-reference/endpoint/ethdailyprice.md) |
-| `etherscan stats dailytx` | Get dailytx series | [dailytx](https://docs.etherscan.io/api-reference/endpoint/dailytx.md) |
-| `etherscan stats dailynewaddress` | Get dailynewaddress series | [dailynewaddress](https://docs.etherscan.io/api-reference/endpoint/dailynewaddress.md) |
-| `etherscan stats dailyavgblocksize` | Get dailyavgblocksize series | [dailyavgblocksize](https://docs.etherscan.io/api-reference/endpoint/dailyavgblocksize.md) |
-| `etherscan stats dailyavgblocktime` | Get dailyavgblocktime series | [dailyavgblocktime](https://docs.etherscan.io/api-reference/endpoint/dailyavgblocktime.md) |
-| `etherscan stats dailyavggasprice` | Get dailyavggasprice series | [dailyavggasprice](https://docs.etherscan.io/api-reference/endpoint/dailyavggasprice.md) |
-| `etherscan stats dailyavggaslimit` | Get dailyavggaslimit series | [dailyavggaslimit](https://docs.etherscan.io/api-reference/endpoint/dailyavggaslimit.md) |
-| `etherscan stats dailygasused` | Get dailygasused series | [dailygasused](https://docs.etherscan.io/api-reference/endpoint/dailygasused.md) |
-| `etherscan stats dailyblockrewards` | Get dailyblockrewards series | [dailyblockrewards](https://docs.etherscan.io/api-reference/endpoint/dailyblockrewards.md) |
-| `etherscan stats dailyblkcount` | Get dailyblkcount series | [dailyblkcount](https://docs.etherscan.io/api-reference/endpoint/dailyblkcount.md) |
-| `etherscan stats dailytxnfee` | Get dailytxnfee series | [dailytxnfee](https://docs.etherscan.io/api-reference/endpoint/dailytxnfee.md) |
-| `etherscan stats dailynetutilization` | Get dailynetutilization series | [dailynetutilization](https://docs.etherscan.io/api-reference/endpoint/dailynetutilization.md) |
-| `etherscan stats dailyuncleblkcount` | Get dailyuncleblkcount series | [dailyuncleblkcount](https://docs.etherscan.io/api-reference/endpoint/dailyuncleblkcount.md) |
-| `etherscan stats dailyavghashrate` | Get dailyavghashrate series | [dailyavghashrate](https://docs.etherscan.io/api-reference/endpoint/dailyavghashrate.md) |
-| `etherscan stats dailyavgnetdifficulty` | Get dailyavgnetdifficulty series | [dailyavgnetdifficulty](https://docs.etherscan.io/api-reference/endpoint/dailyavgnetdifficulty.md) |
-| `etherscan stats dailyensregister` | Get dailyensregister series | [dailyensregister](https://docs.etherscan.io/api-reference/endpoint/dailyensregister.md) |
-| `etherscan stats nodecounthistory` | Get nodecounthistory series | [nodecounthistory](https://docs.etherscan.io/api-reference/endpoint/nodecounthistory.md) |
+| Command | API documentation |
+| --- | --- |
+| `etherscan stats ethsupply` | [ethsupply](https://docs.etherscan.io/api-reference/endpoint/ethsupply.md) |
+| `etherscan stats ethsupply2` | [ethsupply2](https://docs.etherscan.io/api-reference/endpoint/ethsupply2.md) |
+| `etherscan stats ethprice` | [ethprice](https://docs.etherscan.io/api-reference/endpoint/ethprice.md) |
+| `etherscan stats chainsize` | [chainsize](https://docs.etherscan.io/api-reference/endpoint/chainsize.md) |
+| `etherscan stats nodecount` | [nodecount](https://docs.etherscan.io/api-reference/endpoint/nodecount.md) |
+| `etherscan stats tokensupply` | [tokensupply](https://docs.etherscan.io/api-reference/endpoint/tokensupply.md) |
+| `etherscan stats tokensupplyhistory` | [tokensupplyhistory](https://docs.etherscan.io/api-reference/endpoint/tokensupplyhistory.md) |
+| `etherscan stats ethdailyprice` | [ethdailyprice](https://docs.etherscan.io/api-reference/endpoint/ethdailyprice.md) |
+| `etherscan stats dailytx` | [dailytx](https://docs.etherscan.io/api-reference/endpoint/dailytx.md) |
+| `etherscan stats dailynewaddress` | [dailynewaddress](https://docs.etherscan.io/api-reference/endpoint/dailynewaddress.md) |
+| `etherscan stats dailyavgblocksize` | [dailyavgblocksize](https://docs.etherscan.io/api-reference/endpoint/dailyavgblocksize.md) |
+| `etherscan stats dailyavgblocktime` | [dailyavgblocktime](https://docs.etherscan.io/api-reference/endpoint/dailyavgblocktime.md) |
+| `etherscan stats dailyavggasprice` | [dailyavggasprice](https://docs.etherscan.io/api-reference/endpoint/dailyavggasprice.md) |
+| `etherscan stats dailyavggaslimit` | [dailyavggaslimit](https://docs.etherscan.io/api-reference/endpoint/dailyavggaslimit.md) |
+| `etherscan stats dailygasused` | [dailygasused](https://docs.etherscan.io/api-reference/endpoint/dailygasused.md) |
+| `etherscan stats dailyblockrewards` | [dailyblockrewards](https://docs.etherscan.io/api-reference/endpoint/dailyblockrewards.md) |
+| `etherscan stats dailyblkcount` | [dailyblkcount](https://docs.etherscan.io/api-reference/endpoint/dailyblkcount.md) |
+| `etherscan stats dailytxnfee` | [dailytxnfee](https://docs.etherscan.io/api-reference/endpoint/dailytxnfee.md) |
+| `etherscan stats dailynetutilization` | [dailynetutilization](https://docs.etherscan.io/api-reference/endpoint/dailynetutilization.md) |
+| `etherscan stats dailyuncleblkcount` | [dailyuncleblkcount](https://docs.etherscan.io/api-reference/endpoint/dailyuncleblkcount.md) |
+| `etherscan stats dailyavghashrate` | [dailyavghashrate](https://docs.etherscan.io/api-reference/endpoint/dailyavghashrate.md) |
+| `etherscan stats dailyavgnetdifficulty` | [dailyavgnetdifficulty](https://docs.etherscan.io/api-reference/endpoint/dailyavgnetdifficulty.md) |
+| `etherscan stats dailyensregister` | [dailyensregister](https://docs.etherscan.io/api-reference/endpoint/dailyensregister.md) |
+| `etherscan stats nodecounthistory` | [nodecounthistory](https://docs.etherscan.io/api-reference/endpoint/nodecounthistory.md) |
 
 ### Token
 
-| Command | Description | API documentation |
-| --- | --- | --- |
-| `etherscan token info` | Get token metadata | [tokeninfo](https://docs.etherscan.io/api-reference/endpoint/tokeninfo.md) |
-| `etherscan token tokenholderlist` | List token holders | [tokenholderlist](https://docs.etherscan.io/api-reference/endpoint/tokenholderlist.md) |
-| `etherscan token tokenholdercount` | Get token holder count | [tokenholdercount](https://docs.etherscan.io/api-reference/endpoint/tokenholdercount.md) |
-| `etherscan token topholders` | Get top holders | [topholders](https://docs.etherscan.io/api-reference/endpoint/topholders.md) |
+| Command | API documentation |
+| --- | --- |
+| `etherscan token info` | [tokeninfo](https://docs.etherscan.io/api-reference/endpoint/tokeninfo.md) |
+| `etherscan token tokenholderlist` | [tokenholderlist](https://docs.etherscan.io/api-reference/endpoint/tokenholderlist.md) |
+| `etherscan token tokenholdercount` | [tokenholdercount](https://docs.etherscan.io/api-reference/endpoint/tokenholdercount.md) |
+| `etherscan token topholders` | [topholders](https://docs.etherscan.io/api-reference/endpoint/topholders.md) |
 
 ### Gas Tracker
 
-| Command | Description | API documentation |
-| --- | --- | --- |
-| `etherscan gastracker oracle` | Get gas oracle | [gasoracle](https://docs.etherscan.io/api-reference/endpoint/gasoracle.md) |
-| `etherscan gastracker estimate` | Estimate gas confirmation time | [gasestimate](https://docs.etherscan.io/api-reference/endpoint/gasestimate.md) |
+| Command | API documentation |
+| --- | --- |
+| `etherscan gastracker oracle` | [gasoracle](https://docs.etherscan.io/api-reference/endpoint/gasoracle.md) |
+| `etherscan gastracker estimate` | [gasestimate](https://docs.etherscan.io/api-reference/endpoint/gasestimate.md) |
 
 ### Nametag
 
-| Command | Description | API documentation |
-| --- | --- | --- |
-| `etherscan nametag getaddresstag` | Get address name tags and metadata (Pro Plus) | [getaddresstag](https://docs.etherscan.io/api-reference/endpoint/getaddresstag.md) |
+| Command | API documentation |
+| --- | --- |
+| `etherscan nametag getaddresstag` | [getaddresstag](https://docs.etherscan.io/api-reference/endpoint/getaddresstag.md) |
 
 ### Proxy
 
-| Command | Description | API documentation |
-| --- | --- | --- |
-| `etherscan proxy eth_blockNumber` | Get latest block number | [ethblocknumber](https://docs.etherscan.io/api-reference/endpoint/ethblocknumber.md) |
-| `etherscan proxy eth_getBlockByNumber` | Get block by number | [ethgetblockbynumber](https://docs.etherscan.io/api-reference/endpoint/ethgetblockbynumber.md) |
-| `etherscan proxy eth_getTransactionByHash` | Get transaction by hash | [ethgettransactionbyhash](https://docs.etherscan.io/api-reference/endpoint/ethgettransactionbyhash.md) |
-| `etherscan proxy eth_getTransactionByBlockNumberAndIndex` | Get transaction by block/index | [ethgettransactionbyblocknumberandindex](https://docs.etherscan.io/api-reference/endpoint/ethgettransactionbyblocknumberandindex.md) |
-| `etherscan proxy eth_getTransactionCount` | Get account nonce | [ethgettransactioncount](https://docs.etherscan.io/api-reference/endpoint/ethgettransactioncount.md) |
-| `etherscan proxy eth_getBlockTransactionCountByNumber` | Get block tx count | [ethgetblocktransactioncountbynumber](https://docs.etherscan.io/api-reference/endpoint/ethgetblocktransactioncountbynumber.md) |
-| `etherscan proxy eth_getUncleByBlockNumberAndIndex` | Get uncle by block/index | [ethgetunclebyblocknumberandindex](https://docs.etherscan.io/api-reference/endpoint/ethgetunclebyblocknumberandindex.md) |
-| `etherscan proxy eth_sendRawTransaction` | Broadcast signed transaction | [ethsendrawtransaction](https://docs.etherscan.io/api-reference/endpoint/ethsendrawtransaction.md) |
-| `etherscan proxy eth_call` | Execute eth_call | [ethcall](https://docs.etherscan.io/api-reference/endpoint/ethcall.md) |
-| `etherscan proxy eth_estimateGas` | Estimate gas | [ethestimategas](https://docs.etherscan.io/api-reference/endpoint/ethestimategas.md) |
-| `etherscan proxy eth_getTransactionReceipt` | Get receipt | [ethgettransactionreceipt](https://docs.etherscan.io/api-reference/endpoint/ethgettransactionreceipt.md) |
-| `etherscan proxy eth_getCode` | Get code | [ethgetcode](https://docs.etherscan.io/api-reference/endpoint/ethgetcode.md) |
-| `etherscan proxy eth_getStorageAt` | Get storage | [ethgetstorageat](https://docs.etherscan.io/api-reference/endpoint/ethgetstorageat.md) |
-| `etherscan proxy eth_gasPrice` | Get gas price | [ethgasprice](https://docs.etherscan.io/api-reference/endpoint/ethgasprice.md) |
+| Command | API documentation |
+| --- | --- |
+| `etherscan proxy eth_blockNumber` | [ethblocknumber](https://docs.etherscan.io/api-reference/endpoint/ethblocknumber.md) |
+| `etherscan proxy eth_getBlockByNumber` | [ethgetblockbynumber](https://docs.etherscan.io/api-reference/endpoint/ethgetblockbynumber.md) |
+| `etherscan proxy eth_getTransactionByHash` | [ethgettransactionbyhash](https://docs.etherscan.io/api-reference/endpoint/ethgettransactionbyhash.md) |
+| `etherscan proxy eth_getTransactionByBlockNumberAndIndex` | [ethgettransactionbyblocknumberandindex](https://docs.etherscan.io/api-reference/endpoint/ethgettransactionbyblocknumberandindex.md) |
+| `etherscan proxy eth_getTransactionCount` | [ethgettransactioncount](https://docs.etherscan.io/api-reference/endpoint/ethgettransactioncount.md) |
+| `etherscan proxy eth_getBlockTransactionCountByNumber` | [ethgetblocktransactioncountbynumber](https://docs.etherscan.io/api-reference/endpoint/ethgetblocktransactioncountbynumber.md) |
+| `etherscan proxy eth_getUncleByBlockNumberAndIndex` | [ethgetunclebyblocknumberandindex](https://docs.etherscan.io/api-reference/endpoint/ethgetunclebyblocknumberandindex.md) |
+| `etherscan proxy eth_sendRawTransaction` | [ethsendrawtransaction](https://docs.etherscan.io/api-reference/endpoint/ethsendrawtransaction.md) |
+| `etherscan proxy eth_call` | [ethcall](https://docs.etherscan.io/api-reference/endpoint/ethcall.md) |
+| `etherscan proxy eth_estimateGas` | [ethestimategas](https://docs.etherscan.io/api-reference/endpoint/ethestimategas.md) |
+| `etherscan proxy eth_getTransactionReceipt` | [ethgettransactionreceipt](https://docs.etherscan.io/api-reference/endpoint/ethgettransactionreceipt.md) |
+| `etherscan proxy eth_getCode` | [ethgetcode](https://docs.etherscan.io/api-reference/endpoint/ethgetcode.md) |
+| `etherscan proxy eth_getStorageAt` | [ethgetstorageat](https://docs.etherscan.io/api-reference/endpoint/ethgetstorageat.md) |
+| `etherscan proxy eth_gasPrice` | [ethgasprice](https://docs.etherscan.io/api-reference/endpoint/ethgasprice.md) |
 
 ### API Usage
 
-| Command | Description | API documentation |
-| --- | --- | --- |
-| `etherscan apilimit` | Show API credit usage | [getapilimit](https://docs.etherscan.io/api-reference/endpoint/getapilimit.md) |
+| Command | API documentation |
+| --- | --- |
+| `etherscan apilimit` | [getapilimit](https://docs.etherscan.io/api-reference/endpoint/getapilimit.md) |
 <!-- END GENERATED COMMAND INDEX -->
