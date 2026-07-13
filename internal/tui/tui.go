@@ -39,6 +39,21 @@ type Endpoint struct {
 	Params    []Param
 	Columns   []string
 	Paginated bool
+	// Bare marks an endpoint with no module/action on the wire (chainlist): Module
+	// then only places it in the sidebar, and result headers show the Action alone.
+	Bare bool
+	// Group is an optional sidebar group label (docs nav group name) for when it
+	// differs from the wire module (e.g. "usage" for getapilimit). Empty means
+	// group by Module. It never appears in result headers or requests.
+	Group string
+}
+
+// group returns the sidebar group label for the endpoint.
+func (e Endpoint) group() string {
+	if e.Group != "" {
+		return e.Group
+	}
+	return e.Module
 }
 
 // Exec runs one endpoint and returns its raw JSON result. The caller wires this
@@ -138,10 +153,10 @@ func newModel(ctx context.Context, cfg Config) model {
 	byModule := map[string][]Endpoint{}
 	var modules []string
 	for _, ep := range cfg.Endpoints {
-		if _, ok := byModule[ep.Module]; !ok {
-			modules = append(modules, ep.Module)
+		if _, ok := byModule[ep.group()]; !ok {
+			modules = append(modules, ep.group())
 		}
-		byModule[ep.Module] = append(byModule[ep.Module], ep)
+		byModule[ep.group()] = append(byModule[ep.group()], ep)
 	}
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
@@ -366,6 +381,9 @@ func (m *model) submitForm() (tea.Model, tea.Cmd) {
 func (m *model) startFetch() (tea.Model, tea.Cmd) {
 	m.state = stateFetching
 	m.resultTitle = m.current.Module + "/" + m.current.Action
+	if m.current.Bare {
+		m.resultTitle = m.current.Action
+	}
 	return m, tea.Batch(m.spin.Tick, m.fetchCmd())
 }
 

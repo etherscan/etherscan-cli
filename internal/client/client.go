@@ -124,7 +124,19 @@ func (c *Client) Get(ctx context.Context, module, action string, params map[stri
 		return Result{}, err
 	}
 	endpoint.RawQuery = mergeQuery(endpoint.Query(), values).Encode()
-	return c.do(ctx, http.MethodGet, endpoint.String(), "", retryable, module == "proxy")
+	decode := decodeEnvelope
+	if module == "proxy" {
+		decode = decodeRPC
+	}
+	return c.do(ctx, http.MethodGet, endpoint.String(), "", retryable, decode)
+}
+
+// ChainList calls the dedicated supported-chains endpoint. It is the one Etherscan
+// endpoint that is not module/action-shaped: a bare GET on <base>/chainlist with no
+// query parameters (no API key or chainid required) and a non-envelope response.
+func (c *Client) ChainList(ctx context.Context) (Result, error) {
+	endpoint := strings.TrimSuffix(c.baseURL, "/api") + "/chainlist"
+	return c.do(ctx, http.MethodGet, endpoint, "", true, decodeChainList)
 }
 
 func (c *Client) PostForm(ctx context.Context, module, action string, params map[string]string, retryable bool) (Result, error) {
@@ -146,10 +158,10 @@ func (c *Client) PostForm(ctx context.Context, module, action string, params map
 	if err != nil {
 		return Result{}, err
 	}
-	return c.do(ctx, http.MethodPost, endpoint.String(), values.Encode(), retryable, false)
+	return c.do(ctx, http.MethodPost, endpoint.String(), values.Encode(), retryable, decodeEnvelope)
 }
 
-func (c *Client) do(ctx context.Context, method, endpoint, body string, retryable, rpc bool) (Result, error) {
+func (c *Client) do(ctx context.Context, method, endpoint, body string, retryable bool, decode func([]byte) (Result, error)) (Result, error) {
 	attempts := 1
 	if retryable {
 		attempts = c.retries
@@ -201,10 +213,7 @@ func (c *Client) do(ctx context.Context, method, endpoint, body string, retryabl
 		if resp.StatusCode < 200 || resp.StatusCode > 299 {
 			return Result{}, fmt.Errorf("request failed: %s: %s", resp.Status, strings.TrimSpace(string(raw)))
 		}
-		if rpc {
-			return decodeRPC(raw)
-		}
-		return decodeEnvelope(raw)
+		return decode(raw)
 	}
 	return Result{}, lastErr
 }
@@ -257,6 +266,22 @@ func decodeRPC(raw []byte) (Result, error) {
 		return Result{}, fmt.Errorf("json-rpc error %d: %s", rpc.Error.Code, rpc.Error.Message)
 	}
 	return Result{Raw: rpc.Result, RPC: &rpc}, nil
+}
+
+// decodeChainList handles the chainlist endpoint's non-envelope response shape:
+// {"comments": ..., "totalcount": N, "result": [...]}. There is no status/message
+// pair, so decodeEnvelope would misread a valid response as empty.
+func decodeChainList(raw []byte) (Result, error) {
+	var body struct {
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return Result{}, err
+	}
+	if len(body.Result) == 0 {
+		return Result{}, errors.New("unexpected chainlist response: missing result")
+	}
+	return Result{Raw: body.Result}, nil
 }
 
 func DecodeResult[T any](raw json.RawMessage) (T, error) {

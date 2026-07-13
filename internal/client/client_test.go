@@ -133,6 +133,45 @@ func TestClientBuildsRedactedV2Request(t *testing.T) {
 	}
 }
 
+func TestChainList(t *testing.T) {
+	var gotPath, gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotQuery = r.URL.Path, r.URL.RawQuery
+		fmt.Fprint(w, `{"comments":"ok","totalcount":2,"result":[{"chainname":"Ethereum Mainnet","chainid":"1","blockexplorer":"https://etherscan.io","apiurl":"https://api.etherscan.io/v2/api?chainid=1","status":1},{"chainname":"Base Mainnet","chainid":"8453","blockexplorer":"https://basescan.org","apiurl":"https://api.etherscan.io/v2/api?chainid=8453","status":1}]}`)
+	}))
+	defer srv.Close()
+
+	// Mirror the real base URL shape: <host>/v2/api -> chainlist at <host>/v2/chainlist.
+	c := New(Options{BaseURL: srv.URL + "/v2/api", APIKey: "secret", ChainID: "1", RateLimit: 1000})
+	res, err := c.ChainList(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/v2/chainlist" {
+		t.Fatalf("request path = %q, want /v2/chainlist", gotPath)
+	}
+	// The endpoint takes no parameters: no module/action/apikey/chainid may be sent.
+	if gotQuery != "" {
+		t.Fatalf("chainlist must send no query params, got %q", gotQuery)
+	}
+	chains, err := DecodeResult[[]map[string]any](res.Raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chains) != 2 || chains[0]["chainname"] != "Ethereum Mainnet" || chains[1]["chainid"] != "8453" {
+		t.Fatalf("unexpected chainlist rows: %v", chains)
+	}
+}
+
+func TestChainListDecodeErrors(t *testing.T) {
+	if _, err := decodeChainList([]byte(`not json`)); err == nil {
+		t.Fatal("expected error on malformed body")
+	}
+	if _, err := decodeChainList([]byte(`{"comments":"x","totalcount":0}`)); err == nil {
+		t.Fatal("expected error on missing result field")
+	}
+}
+
 func TestValidators(t *testing.T) {
 	if err := ValidateAddress("address", "0x0000000000000000000000000000000000000000"); err != nil {
 		t.Fatal(err)

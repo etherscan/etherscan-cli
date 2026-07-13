@@ -64,6 +64,55 @@ func TestBrowseNoParamEndpointFetches(t *testing.T) {
 	}
 }
 
+// TestGroupLabelDrivesSidebar: endpoints sharing a Group land in one sidebar
+// group under the group label, while the exec call and result header keep the
+// wire module.
+func TestGroupLabelDrivesSidebar(t *testing.T) {
+	var gotModule, gotAction string
+	exec := func(ctx context.Context, module, action string, params map[string]string) (json.RawMessage, error) {
+		gotModule, gotAction = module, action
+		return json.RawMessage(`"ok"`), nil
+	}
+	cfg := Config{
+		Endpoints: []Endpoint{
+			{Module: "account", Action: "balance", Title: "balance"},
+			{Module: "getapilimit", Action: "getapilimit", Title: "getapilimit", Group: "usage"},
+			{Module: "chainlist-wire", Action: "chainlist", Title: "chainlist", Group: "usage"},
+		},
+		Exec:      exec,
+		ChainName: "ethereum",
+		ChainID:   "1",
+		KeyLabel:  "none",
+	}
+	m := newModel(context.Background(), cfg)
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+
+	if len(m.modules) != 2 || m.modules[0] != "account" || m.modules[1] != "usage" {
+		t.Fatalf("sidebar groups wrong: %v", m.modules)
+	}
+	if got := m.byModule["usage"]; len(got) != 2 {
+		t.Fatalf("usage group should hold both endpoints, got %+v", got)
+	}
+	m.modIdx = 1
+	if v := m.View(); !strings.Contains(v, "ENDPOINTS · USAGE") {
+		t.Fatalf("endpoints header should show the group label, got:\n%s", v)
+	}
+
+	// Opening the first usage endpoint must call exec with the wire module.
+	m.focus = focusEndpoints
+	m.epIdx = 0
+	m.openSelected()
+	if msg, ok := m.fetchCmd()().(resultMsg); !ok || msg.err != nil {
+		t.Fatalf("fetch failed: %+v", msg)
+	}
+	if gotModule != "getapilimit" || gotAction != "getapilimit" {
+		t.Fatalf("exec called with %s/%s, want getapilimit/getapilimit", gotModule, gotAction)
+	}
+	if m.resultTitle != "getapilimit/getapilimit" {
+		t.Fatalf("result title must keep the wire pair, got %q", m.resultTitle)
+	}
+}
+
 func TestFormRequiredParamValidation(t *testing.T) {
 	called := false
 	exec := func(ctx context.Context, module, action string, params map[string]string) (json.RawMessage, error) {

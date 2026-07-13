@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -592,6 +593,13 @@ func runSetup(ctx context.Context, state *globalState) error {
 // validation the CLI enforces (e.g. empty comma-list entries).
 func tuiExec(rt resolvedRuntime, index map[string]EndpointSpec) tui.Exec {
 	return func(ctx context.Context, module, action string, params map[string]string) (json.RawMessage, error) {
+		if module == "getapilimit" && action == "chainlist" {
+			res, err := rt.client.ChainList(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return res.Raw, nil
+		}
 		spec, ok := index[module+"/"+action]
 		if !ok {
 			return nil, fmt.Errorf("unknown endpoint %s/%s", module, action)
@@ -610,9 +618,70 @@ func tuiExec(rt resolvedRuntime, index map[string]EndpointSpec) tui.Exec {
 	}
 }
 
+// tuiModuleOrder is the Etherscan docs order (https://docs.etherscan.io/introduction).
+// The TUI sidebar follows it so users can cross-reference the docs; the CLI command
+// tree is unaffected.
+var tuiModuleOrder = []string{
+	"account", "block", "contract", "gastracker", "proxy", "logs",
+	"stats", "transaction", "token", "nametag", "usage",
+}
+
+// tuiModuleGroup maps wire modules to the docs nav group they appear under when
+// the two differ. The TUI sidebar shows the docs group name; requests and result
+// headers keep the wire module.
+var tuiModuleGroup = map[string]string{
+	"getapilimit": "usage",
+}
+
+// tuiActionOrder is the docs sidebar order WITHIN each module (scraped from the
+// rendered nav on docs.etherscan.io, 2026-07-11). Actions whose docs page lives in
+// a different docs group than their API module (token balances, L2 transfers,
+// daily-series stats) are appended after the module's own group, in their group's
+// order. Actions not listed here (e.g. undocumented stats series) sink to the end
+// of their module, keeping registry order among themselves.
+var tuiActionOrder = map[string][]string{
+	"account": {
+		"balance", "balancemulti", "balancehistory", "txlist", "tokentx",
+		"tokennfttx", "token1155tx", "txlistinternal", "getminedblocks",
+		"txsBeaconWithdrawal", "fundedby",
+		// tokens docs group
+		"tokenbalance", "tokenbalancehistory", "addresstokenbalance",
+		"addresstokennftbalance", "addresstokennftinventory",
+		// L2 deposits/withdrawals docs group
+		"txnbridge", "getdeposittxs", "getwithdrawaltxs",
+	},
+	"block":      {"getblockreward", "getblocktxnscount", "getblockcountdown", "getblocknobytime"},
+	"contract":   {"getabi", "getsourcecode", "getcontractcreation", "verifysourcecode", "checkverifystatus", "verifyproxycontract", "checkproxyverification"},
+	"gastracker": {"gasestimate", "gasoracle"},
+	"proxy": {
+		"eth_blockNumber", "eth_getBlockByNumber", "eth_getUncleByBlockNumberAndIndex",
+		"eth_getBlockTransactionCountByNumber", "eth_getTransactionByHash",
+		"eth_getTransactionByBlockNumberAndIndex", "eth_getTransactionCount",
+		"eth_sendRawTransaction", "eth_getTransactionReceipt", "eth_call",
+		"eth_getCode", "eth_getStorageAt", "eth_gasPrice", "eth_estimateGas",
+	},
+	"stats": {
+		"ethsupply", "ethsupply2", "ethprice", "chainsize", "nodecount",
+		"dailytxnfee", "dailynewaddress", "dailynetutilization", "dailyavghashrate",
+		"dailytx", "dailyavgnetdifficulty", "ethdailyprice",
+		// blocks docs group
+		"dailyavgblocksize", "dailyblkcount", "dailyblockrewards",
+		"dailyavgblocktime", "dailyuncleblkcount",
+		// gas tracker docs group
+		"dailyavggaslimit", "dailygasused", "dailyavggasprice",
+		// tokens docs group
+		"tokensupply", "tokensupplyhistory",
+	},
+	"transaction": {"getstatus", "gettxreceiptstatus"},
+	"token":       {"topholders", "tokenholderlist", "tokenholdercount", "tokeninfo"},
+	"usage":       {"getapilimit", "chainlist"},
+}
+
 // tuiEndpoints adapts the registry into the tui package's own types, excluding
-// write/sensitive actions so the explorer stays read-only. It returns the
-// browsable list plus an index for the executor to look specs up by module/action.
+// write/sensitive actions so the explorer stays read-only. Endpoints are titled
+// by their API action (not the friendly CLI alias — the TUI is an API explorer)
+// and ordered by docs module order. It returns the browsable list plus an index
+// for the executor to look specs up by module/action.
 func tuiEndpoints() ([]tui.Endpoint, map[string]EndpointSpec) {
 	var list []tui.Endpoint
 	index := map[string]EndpointSpec{}
@@ -628,21 +697,60 @@ func tuiEndpoints() ([]tui.Endpoint, map[string]EndpointSpec) {
 			}
 			params = append(params, tui.Param{Name: pr.Name, Label: label, Required: pr.Required})
 		}
-		title := spec.Action
-		if f := strings.Fields(spec.Use); len(f) > 0 {
-			title = f[0]
-		}
 		list = append(list, tui.Endpoint{
 			Module:    spec.Module,
 			Action:    spec.Action,
-			Title:     title,
+			Title:     spec.Action,
 			Desc:      spec.Short,
 			Params:    params,
 			Columns:   spec.Columns,
 			Paginated: spec.Paginated,
+			Group:     tuiModuleGroup[spec.Module],
 		})
 		index[spec.Module+"/"+spec.Action] = spec
 	}
+	// chainlist is the one endpoint with no module/action on the wire (dedicated
+	// /v2/chainlist URL). It is placed in the usage group for navigation only —
+	// tuiExec routes it to client.ChainList, never through the spec index.
+	list = append(list, tui.Endpoint{
+		Module:  "getapilimit",
+		Action:  "chainlist",
+		Title:   "chainlist",
+		Desc:    "List all supported Etherscan chains",
+		Columns: []string{"chainname", "chainid", "blockexplorer", "status"},
+		Bare:    true,
+		Group:   tuiModuleGroup["getapilimit"],
+	})
+	groupOf := func(e tui.Endpoint) string {
+		if e.Group != "" {
+			return e.Group
+		}
+		return e.Module
+	}
+	rank := func(group string) int {
+		for i, m := range tuiModuleOrder {
+			if m == group {
+				return i
+			}
+		}
+		return len(tuiModuleOrder) // unknown modules sink to the end
+	}
+	actionRank := func(group, action string) int {
+		order := tuiActionOrder[group]
+		for i, a := range order {
+			if a == action {
+				return i
+			}
+		}
+		return len(order) // unlisted actions sink to the end of their module
+	}
+	sort.SliceStable(list, func(i, j int) bool {
+		gi, gj := groupOf(list[i]), groupOf(list[j])
+		if mi, mj := rank(gi), rank(gj); mi != mj {
+			return mi < mj
+		}
+		return actionRank(gi, list[i].Action) < actionRank(gj, list[j].Action)
+	})
 	return list, index
 }
 
