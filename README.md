@@ -7,7 +7,6 @@ Etherscan's API documentation remains as the main reference for endpoint paramet
 ## Installation
 
 Download a prebuilt binary from [GitHub Releases](https://github.com/etherscan/etherscan-cli/releases)
-```
 
 ## Quickstart
 
@@ -34,51 +33,13 @@ etherscan account txlist 0x0000000000000000000000000000000000000000 --json
 
 ## Interactive Explorer
 
-Run `etherscan` in an interactive terminal, or launch the explorer explicitly:
+Run `etherscan` in an interactive terminal, allowing you to explore, pick and fill in the parameters of each endpoint. 
 
 ```sh
-etherscan tui
+etherscan
 ```
 
-## Common Workflows
-
-### Authentication and configuration
-
-```sh
-etherscan login
-etherscan whoami
-etherscan config list
-etherscan config set default_chain=base
-etherscan logout
-```
-
-### Accounts and tokens
-
-```sh
-etherscan account balance 0x...
-etherscan account txlist 0x... --page 1 --offset 10
-etherscan account tokentx 0x... --contractaddress 0x...
-etherscan token info 0x...
-etherscan token tokenholderlist 0x... --page 1 --offset 10
-```
-
-### Contracts and logs
-
-```sh
-etherscan contract getabi 0x...
-etherscan contract getsourcecode 0x...
-etherscan logs get --address 0x... --from-block 0 --to-block latest
-etherscan contract verify-status <guid>
-```
-
-### Network data and API usage
-
-```sh
-etherscan gastracker oracle
-etherscan stats ethprice
-etherscan proxy eth_blockNumber
-etherscan apilimit
-```
+<img width="1918" height="1054" alt="image" src="https://github.com/user-attachments/assets/98332d40-dda7-415c-8664-8e9c16fa71f4" />
 
 ## Output and Scripting
 
@@ -105,19 +66,7 @@ If `--all` reaches `--max-pages`, the result may be truncated.
 
 ## Command Index
 
-The index below is generated from the CLI's endpoint registry. It lists commands and their canonical API references without duplicating endpoint parameters or flags.
-
-For exact local syntax, use:
-
-```sh
-etherscan --help
-etherscan <group> --help
-etherscan <group> <command> --help
-```
-
 ### CLI utilities
-
-These commands are implemented locally and do not correspond one-to-one with an API endpoint.
 
 | Command | Description |
 | --- | --- |
@@ -131,6 +80,7 @@ These commands are implemented locally and do not correspond one-to-one with an 
 | `etherscan chains list` | List chains built into this CLI release |
 | `etherscan completion` | Generate shell completion |
 | `etherscan version` | Print build information |
+| `etherscan --help` | Helpful tips and command usage |
 
 <!-- BEGIN GENERATED COMMAND INDEX -->
 ### Account
