@@ -49,6 +49,35 @@ func TestTuiExecMainnetOnlyGuard(t *testing.T) {
 	}
 }
 
+// TestTuiValidate: the form's inline-validation hook applies the same guards as
+// the executor — kind checks, the advanced-filter cross-field rule — and lets
+// chainlist (no wire params) through trivially.
+func TestTuiValidate(t *testing.T) {
+	_, index := tuiEndpoints()
+	rt := resolvedRuntime{chain: chains.Chain{ID: "1", Name: "ethereum"}}
+	validate := tuiValidate(rt, index)
+
+	valid := "0x80f3950a4d371c43360f292a4170624abd9eed03"
+	if err := validate("account", "txlist", map[string]string{"address": valid, "sort": "up"}); err == nil || !strings.Contains(err.Error(), "sort must be asc or desc") {
+		t.Fatalf("bad sort not rejected: %v", err)
+	}
+	if err := validate("account", "txlist", map[string]string{"from": valid}); err == nil || !strings.Contains(err.Error(), "fromto") {
+		t.Fatalf("advanced-filter rule not enforced: %v", err)
+	}
+	if err := validate("account", "txlist", map[string]string{"address": valid, "from": valid, "fromto_opr": "or"}); err == nil || !strings.Contains(err.Error(), "cannot be combined") {
+		t.Fatalf("address+from mutual exclusion not enforced: %v", err)
+	}
+	if err := validate("account", "txlist", map[string]string{"address": valid, "sort": "desc"}); err != nil {
+		t.Fatalf("valid params rejected: %v", err)
+	}
+	if err := validate("getapilimit", "chainlist", nil); err != nil {
+		t.Fatalf("chainlist must validate trivially: %v", err)
+	}
+	if err := validate("account", "nosuch", nil); err == nil {
+		t.Fatal("unknown endpoint must be rejected")
+	}
+}
+
 // tuiGroup mirrors the sidebar grouping rule: the docs nav group label when set,
 // else the wire module.
 func tuiGroup(e tui.Endpoint) string {
@@ -259,6 +288,10 @@ func TestTuiEndpointsExcludeWriteActions(t *testing.T) {
 			found = true
 			if len(e.Params) == 0 || e.Params[0].Name != "address" || !e.Params[0].Required {
 				t.Fatalf("account/balance address param not adapted: %+v", e.Params)
+			}
+			// Optional params come through too (the form now collects them).
+			if len(e.Params) < 2 || e.Params[1].Name != "tag" || e.Params[1].Required {
+				t.Fatalf("account/balance optional tag param not adapted: %+v", e.Params)
 			}
 		}
 	}

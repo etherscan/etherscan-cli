@@ -60,6 +60,86 @@ func TestAdvancedFilterCoversTransferActions(t *testing.T) {
 	}
 }
 
+// TestFilterModeSpecs: the txlist family accepts alternative filters instead of
+// a required address (server-verified against the API repo): address stays a
+// positional (Arg) but is no longer Required, and RequireOneOf names the
+// alternatives.
+func TestFilterModeSpecs(t *testing.T) {
+	oneOf := map[string][]string{
+		"txlist":      {"address", "from", "to"},
+		"tokentx":     {"address", "contractaddress", "from", "to"},
+		"tokennfttx":  {"address", "contractaddress", "from", "to"},
+		"token1155tx": {"address", "contractaddress", "from", "to"},
+	}
+	seen := 0
+	for _, spec := range endpoints() {
+		want, ok := oneOf[spec.Action]
+		if !ok || spec.Module != "account" {
+			continue
+		}
+		seen++
+		if len(spec.RequireOneOf) != len(want) {
+			t.Fatalf("%s RequireOneOf = %v, want %v", spec.Action, spec.RequireOneOf, want)
+		}
+		for i, name := range want {
+			if spec.RequireOneOf[i] != name {
+				t.Fatalf("%s RequireOneOf = %v, want %v", spec.Action, spec.RequireOneOf, want)
+			}
+		}
+		for _, p := range spec.Params {
+			if p.Name == "address" {
+				if !p.Arg || p.Required {
+					t.Fatalf("%s address must stay positional (Arg) but optional, got %+v", spec.Action, p)
+				}
+			}
+		}
+	}
+	if seen != len(oneOf) {
+		t.Fatalf("only %d of %d filter-mode specs found", seen, len(oneOf))
+	}
+}
+
+// TestValidateParamsFilterModes: end-to-end through validateParams with the real
+// specs — the exact combinations the server accepts and rejects.
+func TestValidateParamsFilterModes(t *testing.T) {
+	specs := map[string]EndpointSpec{}
+	for _, spec := range endpoints() {
+		if spec.Module == "account" {
+			specs[spec.Action] = spec
+		}
+	}
+	addr := "0x4838b106fce9647bdf1e7877bf73ce8b0bad5f97"
+	addr2 := "0x504e7319f2257501552d5b412787d183efe5374f"
+
+	// from/to-only txlist (the reported bug) must validate.
+	if err := validateParams(specs["txlist"], map[string]string{"from": addr, "to": addr2, "fromto_opr": "and"}); err != nil {
+		t.Fatalf("from/to-only txlist rejected: %v", err)
+	}
+	// address-only still validates.
+	if err := validateParams(specs["txlist"], map[string]string{"address": addr}); err != nil {
+		t.Fatalf("address-only txlist rejected: %v", err)
+	}
+	// nothing at all → at-least-one error.
+	if err := validateParams(specs["txlist"], map[string]string{}); err == nil || !strings.Contains(err.Error(), "at least one of") {
+		t.Fatalf("empty txlist not rejected with at-least-one: %v", err)
+	}
+	// address combined with from/to → mutual-exclusion error.
+	if err := validateParams(specs["txlist"], map[string]string{"address": addr, "from": addr2, "fromto_opr": "or"}); err == nil || !strings.Contains(err.Error(), "cannot be combined") {
+		t.Fatalf("address+from not rejected: %v", err)
+	}
+	// contractaddress-only tokentx is a valid query.
+	if err := validateParams(specs["tokentx"], map[string]string{"contractaddress": addr}); err != nil {
+		t.Fatalf("contractaddress-only tokentx rejected: %v", err)
+	}
+	if err := validateParams(specs["tokentx"], map[string]string{}); err == nil {
+		t.Fatal("empty tokentx not rejected")
+	}
+	// txlistinternal keeps its permissive modes (no RequireOneOf).
+	if err := validateParams(specs["txlistinternal"], map[string]string{"txhash": "0x" + strings.Repeat("a", 64)}); err != nil {
+		t.Fatalf("txhash-only txlistinternal rejected: %v", err)
+	}
+}
+
 func TestValidateAdvancedFilter(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -68,11 +148,15 @@ func TestValidateAdvancedFilter(t *testing.T) {
 		wantOpr string
 	}{
 		{name: "none set", params: map[string]string{}, wantErr: false},
+		{name: "address only ok", params: map[string]string{"address": "0x1"}, wantErr: false},
 		{name: "from without opr", params: map[string]string{"from": "0x1"}, wantErr: true},
 		{name: "and needs both", params: map[string]string{"from": "0x1", "fromto_opr": "and"}, wantErr: true},
 		{name: "or with one ok, normalized", params: map[string]string{"from": "0x1", "fromto_opr": "or"}, wantErr: false, wantOpr: "OR"},
 		{name: "and with both ok, normalized", params: map[string]string{"from": "0x1", "to": "0x2", "fromto_opr": "AnD"}, wantErr: false, wantOpr: "AND"},
 		{name: "bad opr", params: map[string]string{"to": "0x2", "fromto_opr": "xor"}, wantErr: true},
+		// The server rejects address combined with the from/to filter mode.
+		{name: "address with from rejected", params: map[string]string{"address": "0x1", "from": "0x2", "fromto_opr": "or"}, wantErr: true},
+		{name: "address with to rejected", params: map[string]string{"address": "0x1", "to": "0x2", "fromto_opr": "or"}, wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -542,6 +542,7 @@ func launchTUI(ctx context.Context, state *globalState, info BuildInfo) error {
 	return tui.Run(ctx, tui.Config{
 		Endpoints: eps,
 		Exec:      tuiExec(rt, index),
+		Validate:  tuiValidate(rt, index),
 		ChainName: rt.chain.Name,
 		ChainID:   rt.chain.ID,
 		KeyLabel:  keyLabel,
@@ -587,12 +588,36 @@ func runSetup(ctx context.Context, state *globalState) error {
 	return nil
 }
 
-// tuiExec builds the explorer's executor. It applies the SAME pre-call guards as
-// the normal CLI path (endpointCommand RunE) — the mainnet-only check and
-// validateParams — before issuing the request, so the TUI cannot bypass the
-// validation the CLI enforces (e.g. empty comma-list entries).
+// tuiValidate builds the pre-call guard shared by the TUI form (inline errors on
+// submit) and the executor: the mainnet-only check and validateParams — the SAME
+// guards the normal CLI path (endpointCommand RunE) applies, so the TUI cannot
+// bypass the validation the CLI enforces (e.g. empty comma-list entries).
+// chainlist has no module/action or params on the wire, so it passes trivially.
+func tuiValidate(rt resolvedRuntime, index map[string]EndpointSpec) func(module, action string, params map[string]string) error {
+	return func(module, action string, params map[string]string) error {
+		if module == "getapilimit" && action == "chainlist" {
+			return nil
+		}
+		spec, ok := index[module+"/"+action]
+		if !ok {
+			return fmt.Errorf("unknown endpoint %s/%s", module, action)
+		}
+		if spec.MainnetOnly && !chains.IsMainnetID(rt.chain.ID) {
+			return fmt.Errorf("%s/%s is only supported on Ethereum mainnet", spec.Module, spec.Action)
+		}
+		return validateParams(spec, params)
+	}
+}
+
+// tuiExec builds the explorer's executor. It re-runs tuiValidate before issuing
+// the request (defense in depth — the form validates on submit, but the executor
+// must not rely on it).
 func tuiExec(rt resolvedRuntime, index map[string]EndpointSpec) tui.Exec {
+	validate := tuiValidate(rt, index)
 	return func(ctx context.Context, module, action string, params map[string]string) (json.RawMessage, error) {
+		if err := validate(module, action, params); err != nil {
+			return nil, err
+		}
 		if module == "getapilimit" && action == "chainlist" {
 			res, err := rt.client.ChainList(ctx)
 			if err != nil {
@@ -600,17 +625,7 @@ func tuiExec(rt resolvedRuntime, index map[string]EndpointSpec) tui.Exec {
 			}
 			return res.Raw, nil
 		}
-		spec, ok := index[module+"/"+action]
-		if !ok {
-			return nil, fmt.Errorf("unknown endpoint %s/%s", module, action)
-		}
-		if spec.MainnetOnly && !chains.IsMainnetID(rt.chain.ID) {
-			return nil, fmt.Errorf("%s/%s is only supported on Ethereum mainnet", spec.Module, spec.Action)
-		}
-		if err := validateParams(spec, params); err != nil {
-			return nil, err
-		}
-		res, err := call(ctx, rt.client, spec, params)
+		res, err := call(ctx, rt.client, index[module+"/"+action], params)
 		if err != nil {
 			return nil, err
 		}
@@ -912,6 +927,18 @@ func validateParams(spec EndpointSpec, params map[string]string) error {
 			}
 		}
 	}
+	if len(spec.RequireOneOf) > 0 {
+		any := false
+		for _, name := range spec.RequireOneOf {
+			if strings.TrimSpace(params[name]) != "" {
+				any = true
+				break
+			}
+		}
+		if !any {
+			return fmt.Errorf("at least one of %s is required", strings.Join(spec.RequireOneOf, ", "))
+		}
+	}
 	if spec.AdvancedFilter {
 		if err := validateAdvancedFilter(params); err != nil {
 			return err
@@ -927,6 +954,10 @@ func validateAdvancedFilter(params map[string]string) error {
 	to := strings.TrimSpace(params["to"])
 	if from == "" && to == "" {
 		return nil
+	}
+	// The server rejects address combined with the from/to filter mode.
+	if strings.TrimSpace(params["address"]) != "" {
+		return errors.New("address cannot be combined with --from/--to filters")
 	}
 	opr := strings.ToUpper(strings.TrimSpace(params["fromto_opr"]))
 	if opr != "AND" && opr != "OR" {

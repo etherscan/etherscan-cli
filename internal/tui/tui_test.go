@@ -15,7 +15,7 @@ func testModel(exec Exec) *model {
 	cfg := Config{
 		Endpoints: []Endpoint{
 			{Module: "account", Action: "balance", Title: "balance", Desc: "Get native balance",
-				Params: []Param{{Name: "address", Label: "address", Required: true}}},
+				Params: []Param{{Name: "address", Label: "address", Required: true}, {Name: "tag", Label: "block tag"}}},
 			{Module: "stats", Action: "ethprice", Title: "ethprice", Desc: "Get ether price"},
 		},
 		Exec:      exec,
@@ -120,17 +120,21 @@ func TestFormRequiredParamValidation(t *testing.T) {
 		if params["address"] != "0xABC" {
 			t.Fatalf("address param not forwarded: %v", params)
 		}
+		if _, ok := params["tag"]; ok {
+			t.Fatalf("empty optional param must be omitted: %v", params)
+		}
 		return json.RawMessage(`[]`), nil
 	}
 	m := testModel(exec)
 
-	// Open account/balance (module 0, endpoint 0) -> form with one required input.
+	// Open account/balance (module 0, endpoint 0) -> form with the required
+	// address input and the optional tag input.
 	m.modIdx = 0
 	m.focus = focusEndpoints
 	m.epIdx = 0
 	m.openSelected()
-	if m.state != stateForm || len(m.inputs) != 1 {
-		t.Fatalf("expected form with 1 input, got state=%v inputs=%d", m.state, len(m.inputs))
+	if m.state != stateForm || len(m.inputs) != 2 {
+		t.Fatalf("expected form with 2 inputs, got state=%v inputs=%d", m.state, len(m.inputs))
 	}
 
 	// Submitting empty must fail with a form error and not fetch.
@@ -142,7 +146,7 @@ func TestFormRequiredParamValidation(t *testing.T) {
 		t.Fatal("should stay on form when required field empty")
 	}
 
-	// Fill the field and submit -> fetch.
+	// Fill only the required field and submit -> fetch without the optional.
 	m.inputs[0].SetValue("0xABC")
 	if _, cmd := m.submitForm(); cmd == nil {
 		t.Fatal("expected a fetch command after valid submit")
@@ -153,6 +157,160 @@ func TestFormRequiredParamValidation(t *testing.T) {
 	m.fetchCmd()() // trigger exec
 	if !called {
 		t.Fatal("exec was not called")
+	}
+}
+
+// TestFormOptionalParamsAndPager: the form shows optional params but never
+// `page` on paginated endpoints (the n/p pager owns it); a user-set page size
+// (offset) is forwarded and survives paging, and an empty one falls back to the
+// default injected by fetchCmd.
+func TestFormOptionalParamsAndPager(t *testing.T) {
+	var got map[string]string
+	exec := func(ctx context.Context, module, action string, params map[string]string) (json.RawMessage, error) {
+		got = params
+		return json.RawMessage(`[]`), nil
+	}
+	cfg := Config{
+		Endpoints: []Endpoint{{
+			Module: "account", Action: "txlist", Title: "txlist",
+			Params: []Param{
+				{Name: "address", Label: "address", Required: true},
+				{Name: "page", Label: "page number"},
+				{Name: "offset", Label: "page size"},
+				{Name: "sort", Label: "asc or desc"},
+			},
+			Paginated: true,
+		}},
+		Exec:      exec,
+		ChainName: "ethereum", ChainID: "1", KeyLabel: "none",
+	}
+	m := newModel(context.Background(), cfg)
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m.focus = focusEndpoints
+	m.openSelected()
+
+	var names []string
+	for _, pr := range m.inParams {
+		names = append(names, pr.Name)
+	}
+	if len(names) != 3 || names[0] != "address" || names[1] != "offset" || names[2] != "sort" {
+		t.Fatalf("form fields wrong (page must be excluded): %v", names)
+	}
+	if !strings.Contains(m.inputs[1].Placeholder, "default 25") {
+		t.Fatalf("offset placeholder should note the default: %q", m.inputs[1].Placeholder)
+	}
+	// Fields are labeled by the API param name; the usage text stays in the
+	// placeholder only.
+	view := m.View()
+	for _, name := range []string{"offset", "sort", "address"} {
+		if !strings.Contains(view, name) {
+			t.Fatalf("form must label fields by param name %q:\n%s", name, view)
+		}
+	}
+	if !strings.Contains(view, "(optional)") {
+		t.Fatalf("optional fields must be marked:\n%s", view)
+	}
+
+	m.inputs[0].SetValue("0xABC")
+	m.inputs[1].SetValue("5")
+	m.inputs[2].SetValue("desc")
+	m.submitForm()
+	m.fetchCmd()()
+	if got["address"] != "0xABC" || got["offset"] != "5" || got["sort"] != "desc" || got["page"] != "1" {
+		t.Fatalf("submitted params wrong: %v", got)
+	}
+	// Paging keeps the user's page size.
+	m.page = 2
+	m.fetchCmd()()
+	if got["page"] != "2" || got["offset"] != "5" {
+		t.Fatalf("paging lost user params: %v", got)
+	}
+	// An empty offset falls back to the injected default.
+	m.openSelected()
+	m.inputs[0].SetValue("0xABC")
+	m.submitForm()
+	m.fetchCmd()()
+	if got["offset"] != "25" {
+		t.Fatalf("default page size not injected: %v", got)
+	}
+}
+
+// TestFormValidateHookInline: a Config.Validate error keeps the user in the form
+// with the message inline and typed values intact; fixing the value submits.
+func TestFormValidateHookInline(t *testing.T) {
+	cfg := Config{
+		Endpoints: []Endpoint{{
+			Module: "account", Action: "txlist", Title: "txlist",
+			Params: []Param{{Name: "address", Label: "address", Required: true}, {Name: "sort", Label: "asc or desc"}},
+		}},
+		Exec: func(ctx context.Context, module, action string, params map[string]string) (json.RawMessage, error) {
+			return json.RawMessage(`[]`), nil
+		},
+		Validate: func(module, action string, params map[string]string) error {
+			if s := params["sort"]; s != "" && s != "asc" && s != "desc" {
+				return fmt.Errorf("sort must be asc or desc")
+			}
+			return nil
+		},
+		ChainName: "ethereum", ChainID: "1", KeyLabel: "none",
+	}
+	m := newModel(context.Background(), cfg)
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m.focus = focusEndpoints
+	m.openSelected()
+
+	m.inputs[0].SetValue("0xABC")
+	m.inputs[1].SetValue("up")
+	m.submitForm()
+	if m.state != stateForm {
+		t.Fatalf("validation error must keep the form, got state=%v", m.state)
+	}
+	if !strings.Contains(m.formErr, "sort must be asc or desc") {
+		t.Fatalf("inline error missing: %q", m.formErr)
+	}
+	if m.inputs[1].Value() != "up" {
+		t.Fatal("typed value lost on validation error")
+	}
+
+	m.inputs[1].SetValue("desc")
+	if _, cmd := m.submitForm(); cmd == nil {
+		t.Fatal("expected a fetch command after fixing the value")
+	}
+	if m.state != stateFetching || m.formErr != "" {
+		t.Fatalf("expected clean fetch, got state=%v err=%q", m.state, m.formErr)
+	}
+}
+
+// TestFormViewFitsTerminal: a many-field form (getLogs-sized) must window its
+// inputs to the terminal height — Bubble Tea trims overflow from the top, which
+// would delete the header — while keeping the focused input visible.
+func TestFormViewFitsTerminal(t *testing.T) {
+	params := make([]Param, 14)
+	for i := range params {
+		params[i] = Param{Name: fmt.Sprintf("p%02d", i), Label: fmt.Sprintf("param %02d", i)}
+	}
+	params[0].Required = true
+	cfg := Config{
+		Endpoints: []Endpoint{{Module: "logs", Action: "getLogs", Title: "getLogs", Params: params}},
+		ChainName: "ethereum", ChainID: "1", KeyLabel: "none",
+	}
+	m := newModel(context.Background(), cfg)
+	m.focus = focusEndpoints
+	m.openSelected()
+	m.focusInput(7)
+	for h := 15; h <= 50; h++ {
+		m.Update(tea.WindowSizeMsg{Width: 100, Height: h})
+		v := m.View()
+		lines := strings.Split(v, "\n")
+		if len(lines) > h {
+			t.Fatalf("height %d: form view has %d lines", h, len(lines))
+		}
+		if !strings.Contains(lines[0], "Etherscan") {
+			t.Fatalf("height %d: header not on first line: %q", h, lines[0])
+		}
+		if !strings.Contains(v, "p07") {
+			t.Fatalf("height %d: focused field not visible", h)
+		}
 	}
 }
 

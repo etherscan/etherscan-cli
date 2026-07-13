@@ -23,7 +23,9 @@ import (
 	"github.com/etherscan/etherscan-cli/internal/output"
 )
 
-// Param describes a single input the user must supply for an endpoint.
+// Param describes a single input the user must supply for an endpoint. Name is
+// the API param name from the docs and labels the form field; Label is the human
+// explanation shown as the input's placeholder hint.
 type Param struct {
 	Name     string
 	Label    string
@@ -64,6 +66,10 @@ type Exec func(ctx context.Context, module, action string, params map[string]str
 type Config struct {
 	Endpoints []Endpoint
 	Exec      Exec
+	// Validate optionally checks a submitted form's params before any fetch so
+	// errors surface inline in the form (cross-field rules, value kinds). Nil
+	// skips the check; the executor is expected to guard regardless.
+	Validate  func(module, action string, params map[string]string) error
 	ChainName string
 	ChainID   string
 	KeyLabel  string // masked key, or "none"
@@ -302,12 +308,15 @@ func (m *model) openSelected() (tea.Model, tea.Cmd) {
 	m.formErr = ""
 	m.page = 1
 
-	// Collect required params into an input form; if none, fetch immediately.
+	// Collect params into an input form; if none, fetch immediately. page is
+	// omitted on paginated endpoints — the n/p pager owns it (fetchCmd would
+	// overwrite a typed value anyway).
 	m.inParams = nil
 	for _, pr := range m.current.Params {
-		if pr.Required {
-			m.inParams = append(m.inParams, pr)
+		if m.current.Paginated && pr.Name == "page" {
+			continue
 		}
+		m.inParams = append(m.inParams, pr)
 	}
 	if len(m.inParams) == 0 {
 		m.params = map[string]string{}
@@ -317,6 +326,9 @@ func (m *model) openSelected() (tea.Model, tea.Cmd) {
 	for i, pr := range m.inParams {
 		ti := textinput.New()
 		ti.Placeholder = pr.Label
+		if m.current.Paginated && pr.Name == "offset" {
+			ti.Placeholder = fmt.Sprintf("%s (default %d)", pr.Label, pageSize)
+		}
 		ti.Prompt = "› "
 		if i == 0 {
 			ti.Focus()
@@ -374,6 +386,13 @@ func (m *model) submitForm() (tea.Model, tea.Cmd) {
 			params[pr.Name] = v
 		}
 	}
+	if m.cfg.Validate != nil {
+		if err := m.cfg.Validate(m.current.Module, m.current.Action, params); err != nil {
+			m.formErr = err.Error()
+			return m, nil
+		}
+	}
+	m.formErr = ""
 	m.params = params
 	return m.startFetch()
 }
@@ -600,9 +619,34 @@ func (m model) viewForm() string {
 	var b strings.Builder
 	b.WriteString(headSt.Render(m.current.Module+"/"+m.current.Action) + "\n")
 	b.WriteString(descSt.Render(m.current.Desc) + "\n\n")
-	for i, pr := range m.inParams {
-		b.WriteString(labelSt.Render(pr.Label) + "\n")
+	// Window the fields to the terminal height, keeping the focused input in
+	// view — Bubble Tea trims an overflowing view from the top, which would eat
+	// the header first (same failure class viewBrowse guards against). Each
+	// field renders 3 lines; the fixed chrome (header, title, desc, blanks,
+	// footer, error line, edge markers) budgets 10.
+	start, end := 0, len(m.inParams)
+	if m.height > 0 {
+		visible := (m.height - 10) / 3
+		if visible < 1 {
+			visible = 1
+		}
+		start, end = windowIndices(len(m.inParams), visible, m.inputIdx)
+	}
+	if start > 0 {
+		b.WriteString(descSt.Render(fmt.Sprintf("… %d above", start)) + "\n")
+	}
+	for i := start; i < end; i++ {
+		// Fields are labeled by the API param name (docs alignment); the human
+		// explanation is the input's placeholder.
+		label := labelSt.Render(m.inParams[i].Name)
+		if !m.inParams[i].Required {
+			label += descSt.Render(" (optional)")
+		}
+		b.WriteString(label + "\n")
 		b.WriteString(m.inputs[i].View() + "\n\n")
+	}
+	if end < len(m.inParams) {
+		b.WriteString(descSt.Render(fmt.Sprintf("… %d more", len(m.inParams)-end)) + "\n")
 	}
 	if m.formErr != "" {
 		b.WriteString(errSt.Render(m.formErr) + "\n")

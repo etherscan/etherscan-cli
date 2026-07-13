@@ -304,7 +304,7 @@ Options:
 | Flag | Description | Default |
 | --- | --- | --- |
 | `--address` | address | `-` |
-| `--tag` | block tag | `-` |
+| `--tag` | block tag: latest, pending, earliest, or hex | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -342,7 +342,7 @@ Options:
 | Flag | Description | Default |
 | --- | --- | --- |
 | `--address` | comma-separated addresses | `-` |
-| `--tag` | block tag | `-` |
+| `--tag` | block tag: latest, pending, earliest, or hex | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -383,7 +383,7 @@ Options:
 | `--address` | address | `-` |
 | `--offset` | page size | `-` |
 | `--page` | page number | `-` |
-| `--sort` | asc or desc | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`, `--all`, `--max-pages`
 
@@ -404,7 +404,7 @@ Options:
 | Flag | Description | Default |
 | --- | --- | --- |
 | `--address` | address | `-` |
-| `--blocktype` | blocks or uncles | `-` |
+| `--blocktype` | blocks or uncles (default blocks) | `-` |
 | `--offset` | page size | `-` |
 | `--page` | page number | `-` |
 
@@ -429,21 +429,21 @@ Options:
 | `--address` | address | `-` |
 | `--offset` | page size | `-` |
 | `--page` | page number | `-` |
-| `--sort` | asc or desc | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`, `--all`, `--max-pages`
 
 ### `etherscan account token1155tx`
 
 ```text
-Usage: etherscan account token1155tx <address> [flags]
+Usage: etherscan account token1155tx [address] [flags]
 ```
 
 | Argument | Description | Required |
 | --- | --- | --- |
-| `address` | address | Yes |
+| `address` | address | No |
 
-Notes: Supports `--all` automatic pagination. Supports advanced `--from`, `--to`, and `--fromto-opr` filtering.
+Notes: Supports `--all` automatic pagination. Filter by `address` (positional or `--address`), `--contractaddress`, or `--from`/`--to` with `--fromto-opr` (`and`/`or`) — at least one filter is required, and `address` cannot be combined with `--from`/`--to`.
 
 Options:
 
@@ -453,10 +453,10 @@ Options:
 | `--contractaddress` | token contract | `-` |
 | `--endblock` | end block | `-` |
 | `--from` | filter by sender address | `-` |
-| `--fromto-opr` | combine from/to: and or or | `-` |
+| `--fromto-opr` | combine from/to filters: and \| or (required with from/to) | `-` |
 | `--offset` | page size | `-` |
 | `--page` | page number | `-` |
-| `--sort` | asc or desc | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
 | `--startblock` | start block | `-` |
 | `--to` | filter by recipient address | `-` |
 
@@ -478,7 +478,7 @@ Options:
 | --- | --- | --- |
 | `--address` | address | `-` |
 | `--contractaddress` | token contract | `-` |
-| `--tag` | block tag | `-` |
+| `--tag` | block tag: latest, pending, earliest, or hex | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -505,14 +505,14 @@ Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`,
 ### `etherscan account tokennfttx`
 
 ```text
-Usage: etherscan account tokennfttx <address> [flags]
+Usage: etherscan account tokennfttx [address] [flags]
 ```
 
 | Argument | Description | Required |
 | --- | --- | --- |
-| `address` | address | Yes |
+| `address` | address | No |
 
-Notes: Supports `--all` automatic pagination. Supports advanced `--from`, `--to`, and `--fromto-opr` filtering.
+Notes: Supports `--all` automatic pagination. Filter by `address` (positional or `--address`), `--contractaddress`, or `--from`/`--to` with `--fromto-opr` (`and`/`or`) — at least one filter is required, and `address` cannot be combined with `--from`/`--to`.
 
 Options:
 
@@ -522,10 +522,10 @@ Options:
 | `--contractaddress` | token contract | `-` |
 | `--endblock` | end block | `-` |
 | `--from` | filter by sender address | `-` |
-| `--fromto-opr` | combine from/to: and or or | `-` |
+| `--fromto-opr` | combine from/to filters: and \| or (required with from/to) | `-` |
 | `--offset` | page size | `-` |
 | `--page` | page number | `-` |
-| `--sort` | asc or desc | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
 | `--startblock` | start block | `-` |
 | `--to` | filter by recipient address | `-` |
 
@@ -534,14 +534,14 @@ Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`,
 ### `etherscan account tokentx`
 
 ```text
-Usage: etherscan account tokentx <address> [flags]
+Usage: etherscan account tokentx [address] [flags]
 ```
 
 | Argument | Description | Required |
 | --- | --- | --- |
-| `address` | address | Yes |
+| `address` | address | No |
 
-Notes: Supports `--all` automatic pagination. Supports advanced `--from`, `--to`, and `--fromto-opr` filtering.
+Notes: Supports `--all` automatic pagination. Filter by `address` (positional or `--address`), `--contractaddress`, or `--from`/`--to` with `--fromto-opr` (`and`/`or`) — at least one filter is required, and `address` cannot be combined with `--from`/`--to`.
 
 Options:
 
@@ -551,10 +551,10 @@ Options:
 | `--contractaddress` | token contract | `-` |
 | `--endblock` | end block | `-` |
 | `--from` | filter by sender address | `-` |
-| `--fromto-opr` | combine from/to: and or or | `-` |
+| `--fromto-opr` | combine from/to filters: and \| or (required with from/to) | `-` |
 | `--offset` | page size | `-` |
 | `--page` | page number | `-` |
-| `--sort` | asc or desc | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
 | `--startblock` | start block | `-` |
 | `--to` | filter by recipient address | `-` |
 
@@ -563,14 +563,14 @@ Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`,
 ### `etherscan account txlist`
 
 ```text
-Usage: etherscan account txlist <address> [flags]
+Usage: etherscan account txlist [address] [flags]
 ```
 
 | Argument | Description | Required |
 | --- | --- | --- |
-| `address` | address | Yes |
+| `address` | address | No |
 
-Notes: Supports `--all` automatic pagination. Supports advanced `--from`, `--to`, and `--fromto-opr` filtering.
+Notes: Supports `--all` automatic pagination. Filter by `address` (positional or `--address`) or by `--from`/`--to` with `--fromto-opr` (`and`/`or`) — at least one filter is required, and `address` cannot be combined with `--from`/`--to`.
 
 Options:
 
@@ -579,10 +579,10 @@ Options:
 | `--address` | address | `-` |
 | `--endblock` | end block | `-` |
 | `--from` | filter by sender address | `-` |
-| `--fromto-opr` | combine from/to: and or or | `-` |
+| `--fromto-opr` | combine from/to filters: and \| or (required with from/to) | `-` |
 | `--offset` | page size | `-` |
 | `--page` | page number | `-` |
-| `--sort` | asc or desc | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
 | `--startblock` | start block | `-` |
 | `--to` | filter by recipient address | `-` |
 
@@ -603,10 +603,10 @@ Options:
 | `--address` | address | `-` |
 | `--endblock` | end block | `-` |
 | `--from` | filter by sender address | `-` |
-| `--fromto-opr` | combine from/to: and or or | `-` |
+| `--fromto-opr` | combine from/to filters: and \| or (required with from/to) | `-` |
 | `--offset` | page size | `-` |
 | `--page` | page number | `-` |
-| `--sort` | asc or desc | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
 | `--startblock` | start block | `-` |
 | `--to` | filter by recipient address | `-` |
 | `--txhash` | transaction hash | `-` |
@@ -655,7 +655,7 @@ Options:
 | `--endblock` | end block | `-` |
 | `--offset` | page size | `-` |
 | `--page` | page number | `-` |
-| `--sort` | asc or desc | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
 | `--startblock` | start block | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`, `--all`, `--max-pages`
@@ -891,7 +891,7 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--closest` | before or after | `-` |
+| `--closest` | before or after (default before) | `-` |
 | `--timestamp` | unix timestamp | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
@@ -978,14 +978,14 @@ Options:
 | `--page` | page number | `-` |
 | `--to-block` | to block | `-` |
 | `--topic0` | topic0 | `-` |
-| `--topic0-1-opr` | topic operator | `-` |
-| `--topic0-2-opr` | topic operator | `-` |
-| `--topic0-3-opr` | topic operator | `-` |
+| `--topic0-1-opr` | topic operator: and \| or (default and) | `-` |
+| `--topic0-2-opr` | topic operator: and \| or (default and) | `-` |
+| `--topic0-3-opr` | topic operator: and \| or (default and) | `-` |
 | `--topic1` | topic1 | `-` |
-| `--topic1-2-opr` | topic operator | `-` |
-| `--topic1-3-opr` | topic operator | `-` |
+| `--topic1-2-opr` | topic operator: and \| or (default and) | `-` |
+| `--topic1-3-opr` | topic operator: and \| or (default and) | `-` |
 | `--topic2` | topic2 | `-` |
-| `--topic2-3-opr` | topic operator | `-` |
+| `--topic2-3-opr` | topic operator: and \| or (default and) | `-` |
 | `--topic3` | topic3 | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`, `--all`, `--max-pages`
@@ -1011,7 +1011,7 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--gasprice` | gas price in wei | `-` |
+| `--gasprice` | gas price in wei (default 2000000000) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1034,7 +1034,6 @@ Usage: etherscan token
 | `etherscan token info` | Get token metadata |
 | `etherscan token tokenholdercount` | Get token holder count |
 | `etherscan token tokenholderlist` | List token holders |
-| `etherscan token tokenlist` | List tokens |
 | `etherscan token topholders` | Get top holders |
 
 ### `etherscan token info`
@@ -1095,23 +1094,6 @@ Options:
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`, `--all`, `--max-pages`
 
-### `etherscan token tokenlist`
-
-```text
-Usage: etherscan token tokenlist [flags]
-```
-
-Notes: Supports `--all` automatic pagination.
-
-Options:
-
-| Flag | Description | Default |
-| --- | --- | --- |
-| `--offset` | page size | `-` |
-| `--page` | page number | `-` |
-
-Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`, `--all`, `--max-pages`
-
 ### `etherscan token topholders`
 
 ```text
@@ -1155,7 +1137,6 @@ Usage: etherscan stats
 | `etherscan stats dailytx` | Get dailytx series |
 | `etherscan stats dailytxnfee` | Get dailytxnfee series |
 | `etherscan stats dailyuncleblkcount` | Get dailyuncleblkcount series |
-| `etherscan stats ethdailymarketcap` | Get ethdailymarketcap series |
 | `etherscan stats ethdailyprice` | Get ethdailyprice series |
 | `etherscan stats ethprice` | Get ETH price |
 | `etherscan stats ethsupply` | Get ETH supply |
@@ -1177,11 +1158,11 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--clienttype` | client type | `-` |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
-| `--syncmode` | sync mode | `-` |
+| `--clienttype` | client type: geth or parity | `-` |
+| `--enddate` | end date (yyyy-MM-dd) | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
+| `--startdate` | start date (yyyy-MM-dd) | `-` |
+| `--syncmode` | sync mode: default or archive | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1195,9 +1176,9 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
+| `--enddate` | end date (yyyy-MM-dd) | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
+| `--startdate` | start date (yyyy-MM-dd) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1211,9 +1192,9 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
+| `--enddate` | end date (yyyy-MM-dd) | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
+| `--startdate` | start date (yyyy-MM-dd) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1227,9 +1208,9 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
+| `--enddate` | end date (yyyy-MM-dd) | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
+| `--startdate` | start date (yyyy-MM-dd) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1243,9 +1224,9 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
+| `--enddate` | end date (yyyy-MM-dd) | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
+| `--startdate` | start date (yyyy-MM-dd) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1259,9 +1240,9 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
+| `--enddate` | end date (yyyy-MM-dd) | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
+| `--startdate` | start date (yyyy-MM-dd) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1275,9 +1256,9 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
+| `--enddate` | end date (yyyy-MM-dd) | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
+| `--startdate` | start date (yyyy-MM-dd) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1291,9 +1272,9 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
+| `--enddate` | end date (yyyy-MM-dd) | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
+| `--startdate` | start date (yyyy-MM-dd) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1307,9 +1288,9 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
+| `--enddate` | end date (yyyy-MM-dd) | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
+| `--startdate` | start date (yyyy-MM-dd) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1323,9 +1304,9 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
+| `--enddate` | end date (yyyy-MM-dd) | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
+| `--startdate` | start date (yyyy-MM-dd) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1339,9 +1320,9 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
+| `--enddate` | end date (yyyy-MM-dd) | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
+| `--startdate` | start date (yyyy-MM-dd) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1355,9 +1336,9 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
+| `--enddate` | end date (yyyy-MM-dd) | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
+| `--startdate` | start date (yyyy-MM-dd) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1371,9 +1352,9 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
+| `--enddate` | end date (yyyy-MM-dd) | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
+| `--startdate` | start date (yyyy-MM-dd) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1387,9 +1368,9 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
+| `--enddate` | end date (yyyy-MM-dd) | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
+| `--startdate` | start date (yyyy-MM-dd) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1403,9 +1384,9 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
+| `--enddate` | end date (yyyy-MM-dd) | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
+| `--startdate` | start date (yyyy-MM-dd) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1419,25 +1400,9 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
-
-Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
-
-### `etherscan stats ethdailymarketcap`
-
-```text
-Usage: etherscan stats ethdailymarketcap [flags]
-```
-
-Options:
-
-| Flag | Description | Default |
-| --- | --- | --- |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
+| `--enddate` | end date (yyyy-MM-dd) | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
+| `--startdate` | start date (yyyy-MM-dd) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1451,9 +1416,9 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
+| `--enddate` | end date (yyyy-MM-dd) | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
+| `--startdate` | start date (yyyy-MM-dd) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1503,9 +1468,9 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--enddate` | end date | `-` |
-| `--sort` | asc or desc | `-` |
-| `--startdate` | start date | `-` |
+| `--enddate` | end date (yyyy-MM-dd) | `-` |
+| `--sort` | asc or desc (default asc) | `-` |
+| `--startdate` | start date (yyyy-MM-dd) | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1588,7 +1553,7 @@ Options:
 | Flag | Description | Default |
 | --- | --- | --- |
 | `--data` | call data | `-` |
-| `--tag` | block tag | `-` |
+| `--tag` | block tag: latest, pending, earliest, or hex | `-` |
 | `--to` | contract address | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
@@ -1629,8 +1594,8 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--boolean` | include tx objects | `-` |
-| `--tag` | block tag | `-` |
+| `--boolean` | include tx objects: true or false | `-` |
+| `--tag` | block tag: latest, pending, earliest, or hex | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1644,7 +1609,7 @@ Options:
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `--tag` | block tag | `-` |
+| `--tag` | block tag: latest, pending, earliest, or hex | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1663,7 +1628,7 @@ Options:
 | Flag | Description | Default |
 | --- | --- | --- |
 | `--address` | address | `-` |
-| `--tag` | block tag | `-` |
+| `--tag` | block tag: latest, pending, earliest, or hex | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1683,7 +1648,7 @@ Options:
 | --- | --- | --- |
 | `--address` | address | `-` |
 | `--position` | storage position | `-` |
-| `--tag` | block tag | `-` |
+| `--tag` | block tag: latest, pending, earliest, or hex | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1698,7 +1663,7 @@ Options:
 | Flag | Description | Default |
 | --- | --- | --- |
 | `--index` | transaction index | `-` |
-| `--tag` | block tag | `-` |
+| `--tag` | block tag: latest, pending, earliest, or hex | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1735,7 +1700,7 @@ Options:
 | Flag | Description | Default |
 | --- | --- | --- |
 | `--address` | address | `-` |
-| `--tag` | block tag | `-` |
+| `--tag` | block tag: latest, pending, earliest, or hex | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
@@ -1768,7 +1733,7 @@ Options:
 | Flag | Description | Default |
 | --- | --- | --- |
 | `--index` | uncle index | `-` |
-| `--tag` | block tag | `-` |
+| `--tag` | block tag: latest, pending, earliest, or hex | `-` |
 
 Global flags: `--chain`, `--output`/`--json`/`--csv`, `--api-key`, `--base-url`, `--timeout`, `--rate-limit`
 
