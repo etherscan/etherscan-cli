@@ -1,6 +1,7 @@
 # Build output
 /bin/
 /dist/
+/npm/platforms/
 *.exe
 *.exe~
 *.dll

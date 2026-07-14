@@ -1,38 +1,68 @@
-# Etherscan CLI
+<h1 align="center">Etherscan CLI</h1>
 
-A cross-platform Go CLI and interactive explorer for the [Etherscan V2 API](https://docs.etherscan.io/). It maps supported Etherscan endpoints into commands for accounts, tokens, contracts, logs, gas, stats, proxy/RPC-style methods, API usage, address metadata, across multiple EVM chains.
+<p align="center">
+  <strong>Explore EVM chains from your terminal.</strong><br>
+  One API key for balances, transactions, tokens, contracts, logs, gas, stats, and more.
+</p>
 
-Etherscan's API documentation remains as the main reference for endpoint parameters, responses, rate limits, supported chains, and errors.
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#get-started">Get started</a> ·
+  <a href="#practical-workflows">Examples</a> ·
+  <a href="#command-reference">Command reference</a> ·
+  <a href="https://docs.etherscan.io/">API documentation</a>
+</p>
 
-## Installation
+<p align="center">
+  <img width="100%" alt="Etherscan CLI interactive explorer" src="https://github.com/user-attachments/assets/98332d40-dda7-415c-8664-8e9c16fa71f4">
+</p>
 
-### macOS and Linux
+The official command-line client and interactive explorer for the [Etherscan V2 API](https://docs.etherscan.io/). Use it interactively, pipe clean JSON into scripts, export transactions to CSV, or give an AI agent a predictable interface to on-chain data.
 
-Install the latest release with the installer script:
+## Why Etherscan CLI?
+
+- **Interactive explorer** — browse endpoints, fill parameters, and inspect results without memorizing commands.
+- **Multichain by default** — switch between Ethereum and supported EVM chains by name or chain ID.
+- **Made for the terminal** — readable tables for humans, plus JSON and CSV for automation.
+- **Automatic pagination** — collect multi-page transaction and token results with one flag.
+- **Broad API coverage** — accounts, contracts, tokens, logs, blocks, gas, stats, name tags, and proxy/RPC methods.
+- **Agent-friendly output** — deterministic commands, clean stdout, compact JSON, and explicit errors.
+
+## Install
+
+### npm — macOS, Linux, and Windows
+
+```sh
+npm install --global @etherscan/cli
+etherscan version
+```
+
+No global install is required when using `npx`:
+
+```sh
+npx @etherscan/cli version
+```
+
+The npm package installs only the native binary for the current platform. Node.js 18 or newer is required.
+
+### Shell — macOS and Linux
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/etherscan/etherscan-cli/master/install.sh | sh
 ```
 
-The script detects macOS or Linux and amd64 or arm64, verifies the release checksum, and installs `etherscan` to `/usr/local/bin`. If that directory is not writable, either run the command with the permissions appropriate for your system or choose a user-owned directory:
+The installer detects amd64 or arm64, verifies the release checksum, and installs to `/usr/local/bin`. To use a different location:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/etherscan/etherscan-cli/master/install.sh | INSTALL_DIR="$HOME/.local/bin" sh
 ```
 
-Make sure a custom install directory is included in your `PATH`.
+<details>
+<summary><strong>Windows binaries, Go install, and manual installation</strong></summary>
 
-### Windows
+### Windows binary
 
-Download the latest `windows_amd64.zip` or `windows_arm64.zip` from [GitHub Releases](https://github.com/etherscan/etherscan-cli/releases/latest), extract `etherscan.exe`, and place it in a directory included in your `PATH`.
-
-PowerShell example for the current v1.0.0 release on a typical Intel/AMD Windows computer:
-
-```powershell
-Invoke-WebRequest https://github.com/etherscan/etherscan-cli/releases/download/v1.0.0/etherscan_1.0.0_windows_amd64.zip -OutFile etherscan.zip
-Expand-Archive .\etherscan.zip -DestinationPath .\etherscan
-.\etherscan\etherscan.exe version
-```
+Download `windows_amd64.zip` or `windows_arm64.zip` from [GitHub Releases](https://github.com/etherscan/etherscan-cli/releases/latest), extract `etherscan.exe`, and place it in a directory included in `PATH`.
 
 ### Go
 
@@ -42,67 +72,107 @@ With Go 1.25 or newer:
 go install github.com/etherscan/etherscan-cli/cmd/etherscan@latest
 ```
 
-### npm
+### Manual
 
-npm installation is not currently supported. This project is a Go CLI and does not publish an official npm package; use a release binary, the installer script, or `go install`.
+Download the archive for your operating system and architecture from [GitHub Releases](https://github.com/etherscan/etherscan-cli/releases/latest), verify it against `checksums.txt`, and place the extracted binary in `PATH`.
 
-## Quickstart
+</details>
 
-Store and validate an Etherscan API key, then make your first request:
+## Get started
+
+### 1. Add your API key
+
+Get an [Etherscan API key](https://etherscan.io/apis), then validate and save it:
 
 ```sh
 etherscan login
 etherscan whoami
-etherscan account balance 0x0000000000000000000000000000000000000000
 ```
 
-Select a chain by name or chain ID:
+For CI or temporary sessions, use an environment variable instead:
 
 ```sh
-etherscan --chain base account txlist 0x0000000000000000000000000000000000000000 --page 1 --offset 5
-etherscan --chain 8453 gastracker oracle
+export ETHERSCAN_API_KEY="YOUR_API_KEY"
 ```
 
-Use JSON when handing results to another program or agent:
+### 2. Make your first request
 
 ```sh
-etherscan account txlist 0x0000000000000000000000000000000000000000 --json
+etherscan account balance 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
 ```
 
-## Interactive Explorer
+### 3. Explore interactively
 
-Run `etherscan` in an interactive terminal, allowing you to explore, pick and fill in the parameters of each endpoint.
+Run the CLI without a command to open the full-screen endpoint explorer:
 
 ```sh
 etherscan
 ```
 
-<img width="1918" height="1054" alt="image" src="https://github.com/user-attachments/assets/98332d40-dda7-415c-8664-8e9c16fa71f4" />
+Use `etherscan tui` when you want to launch it explicitly.
 
-## Output and Scripting
+## Practical workflows
 
-Tables are the default. Use JSON or CSV for scripts and pipelines:
+### Follow wallet activity
 
 ```sh
-etherscan account balance 0x... --json
-etherscan account balance 0x... --json --compact
-etherscan account txlist 0x... --csv
-etherscan account txlist 0x... --all --max-pages 50 --json
+# Recent normal transactions
+etherscan account txlist 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --page 1 --offset 10
+
+# ERC-20 transfers as JSON
+etherscan account tokentx 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --json
+
+# Collect multiple pages for analysis
+etherscan account txlist 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --all --max-pages 50 --csv
 ```
 
-| Flag | Purpose |
-| --- | --- |
-| `--output <format>` | Select `table`, `json`, or `csv` |
-| `--json` | Print the raw API result as JSON |
-| `--compact` | Print compact JSON |
-| `--csv` | Print list-style results as CSV |
-| `--all` | Automatically paginate supported list commands |
-| `--max-pages <n>` | Stop automatic pagination after at most `n` pages |
+### Inspect a smart contract
 
-If `--all` reaches `--max-pages`, the result may be truncated.
+```sh
+# WETH contract ABI and verified source metadata
+etherscan contract getabi 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+etherscan contract getsourcecode 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 --json
+```
 
+### Switch chains
 
-## Command Index
+```sh
+# Chain names and numeric IDs both work
+etherscan --chain base gastracker oracle
+etherscan --chain 8453 account balance 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+
+# See every chain built into this release
+etherscan chains list
+```
+
+### Build scripts and agent workflows
+
+```sh
+# Clean JSON for jq, Python, or an AI agent
+etherscan account txlist 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --json --compact | jq '.[0]'
+
+# CSV for spreadsheets and data pipelines
+etherscan account tokentx 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --csv > token-transfers.csv
+```
+
+Tables are the default. Use `--json`, `--json --compact`, `--csv`, or `--output <table|json|csv>` to select another format. Diagnostics go to stderr so stdout remains suitable for pipelines.
+
+For paginated commands, `--all` follows subsequent pages and `--max-pages <n>` sets a safety limit. Results may be truncated when that limit is reached.
+
+## Command reference
+
+Every command includes built-in parameter and usage help:
+
+```sh
+etherscan --help
+etherscan account txlist --help
+etherscan contract verify --help
+```
+
+<details>
+<summary><strong>Browse all commands</strong></summary>
+
+### CLI utilities
 
 ### CLI utilities
 
@@ -253,3 +323,20 @@ If `--all` reaches `--max-pages`, the result may be truncated.
 | Command | Description |
 | --- | --- |
 | `etherscan apilimit` | Show used, available, and total API credits |
+
+</details>
+
+## Development
+
+```sh
+# Run the Go test suite
+go test ./...
+
+# Build the CLI
+go build -o etherscan ./cmd/etherscan
+
+# Run the npm launcher tests
+npm test
+```
+
+API behavior, parameters, rate limits, supported chains, and error definitions are documented in the [Etherscan API documentation](https://docs.etherscan.io/).

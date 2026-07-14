@@ -1,0 +1,44 @@
+{
+  "name": "@etherscan/cli",
+  "version": "1.0.0",
+  "description": "Official command-line client and interactive explorer for the Etherscan V2 API",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/etherscan/etherscan-cli.git"
+  },
+  "homepage": "https://github.com/etherscan/etherscan-cli#readme",
+  "bugs": "https://github.com/etherscan/etherscan-cli/issues",
+  "keywords": [
+    "etherscan",
+    "ethereum",
+    "cli",
+    "blockchain",
+    "api"
+  ],
+  "bin": {
+    "etherscan": "npm/bin/etherscan.js"
+  },
+  "files": [
+    "npm/bin/etherscan.js",
+    "npm/lib/target.js",
+    "README.md"
+  ],
+  "scripts": {
+    "build:npm": "node npm/scripts/build-platforms.js",
+    "test": "node --test npm/test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "optionalDependencies": {
+    "@etherscan/cli-darwin-x64": "1.0.0",
+    "@etherscan/cli-darwin-arm64": "1.0.0",
+    "@etherscan/cli-linux-x64": "1.0.0",
+    "@etherscan/cli-linux-arm64": "1.0.0",
+    "@etherscan/cli-win32-x64": "1.0.0",
+    "@etherscan/cli-win32-arm64": "1.0.0"
+  }
+}
