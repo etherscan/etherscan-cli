@@ -57,26 +57,21 @@ The installer detects amd64 or arm64, verifies the release checksum, and install
 curl -fsSL https://raw.githubusercontent.com/etherscan/etherscan-cli/master/install.sh | INSTALL_DIR="$HOME/.local/bin" sh
 ```
 
-<details>
-<summary><strong>Windows binaries, Go install, and manual installation</strong></summary>
-
-### Windows binary
+### Windows
 
 Download `windows_amd64.zip` or `windows_arm64.zip` from [GitHub Releases](https://github.com/etherscan/etherscan-cli/releases/latest), extract `etherscan.exe`, and place it in a directory included in `PATH`.
 
-### Go
+### Manual installation
+
+Download the archive for your operating system and architecture from [GitHub Releases](https://github.com/etherscan/etherscan-cli/releases/latest), verify it against `checksums.txt`, and place the extracted binary in `PATH`.
+
+### Building from source
 
 With Go 1.25 or newer:
 
 ```sh
 go install github.com/etherscan/etherscan-cli/cmd/etherscan@latest
 ```
-
-### Manual
-
-Download the archive for your operating system and architecture from [GitHub Releases](https://github.com/etherscan/etherscan-cli/releases/latest), verify it against `checksums.txt`, and place the extracted binary in `PATH`.
-
-</details>
 
 ## Get started
 
