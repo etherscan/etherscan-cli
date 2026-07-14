@@ -45,6 +45,8 @@ Common output flags:
 
 `--all` works on paginated list commands. If the command reaches `--max-pages`, results may be truncated.
 
+`--page` and `--offset` must be used together.
+
 ## Configuration and API Keys
 
 An API key is required for all API commands. Get a free key at

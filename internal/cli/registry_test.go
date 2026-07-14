@@ -140,6 +140,51 @@ func TestValidateParamsFilterModes(t *testing.T) {
 	}
 }
 
+// TestValidatePagination: the API only paginates when both page and offset are
+// present, so the CLI rejects a half-specified pair on the single-call path.
+func TestValidatePagination(t *testing.T) {
+	specs := map[string]EndpointSpec{}
+	for _, spec := range endpoints() {
+		if spec.Module == "account" {
+			specs[spec.Action] = spec
+		}
+	}
+	txlist := specs["txlist"] // Paginated, declares both page and offset
+	if !txlist.Paginated || !hasParam(txlist, "page") || !hasParam(txlist, "offset") {
+		t.Fatalf("txlist spec precondition failed: %+v", txlist)
+	}
+	balance := specs["balance"] // not Paginated
+	if balance.Paginated {
+		t.Fatalf("balance unexpectedly Paginated")
+	}
+	// Paginated spec that only declares offset (no page) — the hasParam guard must
+	// skip it so a lone offset is allowed through.
+	offsetOnlySpec := EndpointSpec{Paginated: true, Params: []ParamSpec{p("offset", "limit", KindUint)}}
+
+	cases := []struct {
+		name    string
+		spec    EndpointSpec
+		params  map[string]string
+		wantErr bool
+	}{
+		{name: "offset only", spec: txlist, params: map[string]string{"offset": "10"}, wantErr: true},
+		{name: "page only", spec: txlist, params: map[string]string{"page": "2"}, wantErr: true},
+		{name: "both set", spec: txlist, params: map[string]string{"page": "1", "offset": "10"}, wantErr: false},
+		{name: "neither set", spec: txlist, params: map[string]string{}, wantErr: false},
+		{name: "blank counts as unset", spec: txlist, params: map[string]string{"offset": "10", "page": "  "}, wantErr: true},
+		{name: "non-paginated with stray offset", spec: balance, params: map[string]string{"offset": "10"}, wantErr: false},
+		{name: "paginated without page param", spec: offsetOnlySpec, params: map[string]string{"offset": "10"}, wantErr: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validatePagination(tc.spec, tc.params)
+			if tc.wantErr != (err != nil) {
+				t.Fatalf("wantErr=%v got err=%v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
 func TestValidateAdvancedFilter(t *testing.T) {
 	cases := []struct {
 		name    string

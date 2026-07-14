@@ -148,6 +148,9 @@ func endpointCommand(state *globalState, spec EndpointSpec) *cobra.Command {
 			if state.all && spec.Paginated {
 				return runAllPages(cmd.Context(), rt, spec, params, state.maxPages)
 			}
+			if err := validatePagination(spec, params); err != nil {
+				return err
+			}
 			result, err := call(cmd.Context(), rt.client, spec, params)
 			if err != nil {
 				return err
@@ -945,6 +948,34 @@ func validateParams(spec EndpointSpec, params map[string]string) error {
 		}
 	}
 	return nil
+}
+
+// validatePagination enforces the API's page/offset pairing rule. The Etherscan
+// API only paginates when BOTH page and offset are present (and numeric > 0); given
+// just one it silently ignores it and returns the full default window. Applies only
+// to endpoints that declare both params. Not enforced under --all, where runAllPages
+// supplies page itself and --offset is the page size — so it is called only on the
+// single-call path.
+func validatePagination(spec EndpointSpec, params map[string]string) error {
+	if !spec.Paginated || !hasParam(spec, "page") || !hasParam(spec, "offset") {
+		return nil
+	}
+	pageSet := strings.TrimSpace(params["page"]) != ""
+	offsetSet := strings.TrimSpace(params["offset"]) != ""
+	if pageSet != offsetSet {
+		return errors.New("--page and --offset must be used together.")
+	}
+	return nil
+}
+
+// hasParam reports whether the spec declares a parameter with the given name.
+func hasParam(spec EndpointSpec, name string) bool {
+	for _, p := range spec.Params {
+		if p.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // validateAdvancedFilter enforces the from/to/fromto_opr rules and normalizes the
