@@ -133,6 +133,27 @@ func TestClientBuildsRedactedV2Request(t *testing.T) {
 	}
 }
 
+func TestClientForChainPreservesSession(t *testing.T) {
+	c := New(Options{BaseURL: "https://example.test/v2/api", APIKey: "secret", ChainID: "1", RateLimit: 3})
+	switched := c.ForChain("137")
+
+	if switched == c {
+		t.Fatal("ForChain must return a distinct client")
+	}
+	if c.chainID != "1" || switched.chainID != "137" {
+		t.Fatalf("chain IDs changed incorrectly: original=%q switched=%q", c.chainID, switched.chainID)
+	}
+	if switched.limiter != c.limiter {
+		t.Fatal("chain switch must preserve the session rate limiter")
+	}
+	if switched.http != c.http {
+		t.Fatal("chain switch must preserve the HTTP transport")
+	}
+	if switched.baseURL != c.baseURL || switched.apiKey != c.apiKey || switched.retries != c.retries {
+		t.Fatal("chain switch changed resolved client settings")
+	}
+}
+
 func TestChainList(t *testing.T) {
 	var gotPath, gotQuery string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

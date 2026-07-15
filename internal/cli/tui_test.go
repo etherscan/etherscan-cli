@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -211,6 +212,31 @@ func TestTuiChainListEntry(t *testing.T) {
 	if len(usage[1].Params) != 0 || usage[1].Paginated {
 		t.Fatal("chainlist takes no params and is not paginated")
 	}
+}
+
+func TestTuiChainsPreservesSupportedChainMetadata(t *testing.T) {
+	all := tuiChains()
+	if len(all) != 64 || all[0].DisplayName != "Ethereum Mainnet" || all[len(all)-1].DisplayName != "MegaETH Testnet" {
+		t.Fatalf("TUI chains do not follow supported-chains order: count=%d first=%q last=%q", len(all), all[0].DisplayName, all[len(all)-1].DisplayName)
+	}
+	for _, chain := range all {
+		if chain.Name != "polygon" {
+			continue
+		}
+		if !slices.Contains(chain.Aliases, "matic") {
+			t.Fatalf("polygon aliases missing matic: %v", chain.Aliases)
+		}
+		if chain.DisplayName != "Polygon Mainnet" || chain.PaidOnly {
+			t.Fatalf("polygon metadata incorrect: %+v", chain)
+		}
+		for _, paid := range all {
+			if paid.Name == "base" && !paid.PaidOnly {
+				t.Fatalf("base must be marked paid-only: %+v", paid)
+			}
+		}
+		return
+	}
+	t.Fatal("polygon missing from TUI chains")
 }
 
 // TestTuiEndpointsDocsActionOrder: within each module, actions listed in

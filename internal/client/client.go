@@ -104,6 +104,14 @@ func New(opts Options) *Client {
 	}
 }
 
+// ForChain returns a client bound to chainID while preserving the existing
+// transport, rate limiter, credentials, and other session settings.
+func (c *Client) ForChain(chainID string) *Client {
+	clone := *c
+	clone.chainID = chainID
+	return &clone
+}
+
 func (c *Client) Get(ctx context.Context, module, action string, params map[string]string, retryable bool) (Result, error) {
 	values := url.Values{}
 	values.Set("module", module)

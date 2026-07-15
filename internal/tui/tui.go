@@ -74,7 +74,7 @@ type Config struct {
 	ChainID   string
 	KeyLabel  string // masked key, or "none"
 	// Chains is the list offered by the in-TUI chain switcher; SwitchChain applies a
-	// selection (rebuilding the client) and returns the resolved name/id. Both are
+	// selection (rebinding the client) and returns the resolved display name/id. Both are
 	// optional — a nil SwitchChain disables the switcher entirely.
 	Chains      []ChainInfo
 	SwitchChain func(nameOrID string) (name, id string, err error)
@@ -82,9 +82,12 @@ type Config struct {
 
 // ChainInfo is one selectable chain in the switcher.
 type ChainInfo struct {
-	Name    string
-	ID      string
-	Testnet bool
+	Name        string // stable CLI slug passed to SwitchChain
+	DisplayName string // official Etherscan supported-chains name
+	ID          string
+	Aliases     []string
+	Testnet     bool
+	PaidOnly    bool
 }
 
 // Run launches the full-screen explorer and blocks until the user quits.
@@ -168,6 +171,7 @@ type model struct {
 	chainIdx    int
 	chainFilter string
 	chainErr    string
+	chainReturn viewState
 
 	width, height int
 	ready         bool
@@ -478,6 +482,7 @@ func (m *model) openChainPicker() (tea.Model, tea.Cmd) {
 	if m.cfg.SwitchChain == nil || len(m.cfg.Chains) == 0 {
 		return m, nil
 	}
+	m.chainReturn = m.state
 	m.state = stateChainPicker
 	m.chainFilter = ""
 	m.chainErr = ""
@@ -494,7 +499,12 @@ func (m model) filteredChains() []ChainInfo {
 	needle := strings.ToLower(m.chainFilter)
 	var out []ChainInfo
 	for _, c := range m.cfg.Chains {
-		if strings.Contains(strings.ToLower(c.Name), needle) || strings.Contains(c.ID, needle) {
+		matched := strings.Contains(strings.ToLower(c.Name), needle) ||
+			strings.Contains(strings.ToLower(c.DisplayName), needle) || strings.Contains(c.ID, needle)
+		for _, alias := range c.Aliases {
+			matched = matched || strings.Contains(strings.ToLower(alias), needle)
+		}
+		if matched {
 			out = append(out, c)
 		}
 	}
@@ -507,15 +517,17 @@ func (m *model) keyChainPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyCtrlC:
 		return m, tea.Quit
 	case tea.KeyEsc:
-		m.state = stateBrowse
+		m.state = m.chainReturn
 		m.chainFilter = ""
 		m.chainErr = ""
 		return m, nil
 	case tea.KeyUp:
 		m.chainIdx = clamp(m.chainIdx-1, 0, max(0, len(list)-1))
+		m.chainErr = ""
 		return m, nil
 	case tea.KeyDown:
 		m.chainIdx = clamp(m.chainIdx+1, 0, max(0, len(list)-1))
+		m.chainErr = ""
 		return m, nil
 	case tea.KeyEnter:
 		if len(list) == 0 {
@@ -533,13 +545,16 @@ func (m *model) keyChainPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyBackspace:
 		if m.chainFilter != "" {
-			m.chainFilter = m.chainFilter[:len(m.chainFilter)-1]
+			runes := []rune(m.chainFilter)
+			m.chainFilter = string(runes[:len(runes)-1])
 			m.chainIdx = 0
+			m.chainErr = ""
 		}
 		return m, nil
 	case tea.KeyRunes:
 		m.chainFilter += string(msg.Runes)
 		m.chainIdx = 0
+		m.chainErr = ""
 		return m, nil
 	}
 	return m, nil
@@ -621,10 +636,14 @@ func (m model) viewChainPicker() string {
 		}
 		for i := start; i < end; i++ {
 			c := list[i]
-			line := fmt.Sprintf("%s (%s)", c.Name, c.ID)
+			displayName := c.DisplayName
+			if displayName == "" {
+				displayName = c.Name
+			}
+			line := fmt.Sprintf("%s (%s)", displayName, c.ID)
 			suffix := ""
-			if c.Testnet {
-				suffix = " (testnet)"
+			if c.PaidOnly {
+				suffix = " (paid only)"
 			}
 			if i == idx {
 				b.WriteString(selSt.Render("› "+line+suffix) + "\n")

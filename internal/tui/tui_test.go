@@ -289,9 +289,9 @@ func chainPickerModel(switchChain func(string) (string, string, error)) *model {
 		},
 		ChainName: "ethereum", ChainID: "1", KeyLabel: "none",
 		Chains: []ChainInfo{
-			{Name: "ethereum", ID: "1"},
-			{Name: "polygon", ID: "137"},
-			{Name: "sepolia", ID: "11155111", Testnet: true},
+			{Name: "ethereum", DisplayName: "Ethereum Mainnet", ID: "1"},
+			{Name: "polygon", DisplayName: "Polygon Mainnet", ID: "137", Aliases: []string{"matic", "pol"}},
+			{Name: "sepolia", DisplayName: "Sepolia Testnet", ID: "11155111", Testnet: true},
 		},
 		SwitchChain: switchChain,
 	}
@@ -310,7 +310,7 @@ func TestChainPickerSwitch(t *testing.T) {
 	var gotArg string
 	m := chainPickerModel(func(nameOrID string) (string, string, error) {
 		gotArg = nameOrID
-		return "polygon", "137", nil
+		return "Polygon Mainnet", "137", nil
 	})
 
 	typeRunes(m, "c") // open from browse
@@ -326,7 +326,7 @@ func TestChainPickerSwitch(t *testing.T) {
 	if gotArg != "polygon" {
 		t.Fatalf("SwitchChain called with %q, want polygon", gotArg)
 	}
-	if m.cfg.ChainName != "polygon" || m.cfg.ChainID != "137" {
+	if m.cfg.ChainName != "Polygon Mainnet" || m.cfg.ChainID != "137" {
 		t.Fatalf("displayed chain not updated: %s (%s)", m.cfg.ChainName, m.cfg.ChainID)
 	}
 	if m.state != stateBrowse {
@@ -356,6 +356,67 @@ func TestChainPickerFilterAndCancel(t *testing.T) {
 	}
 	if m.state != stateBrowse || m.chainFilter != "" {
 		t.Fatalf("esc should restore browse and clear filter: state=%v filter=%q", m.state, m.chainFilter)
+	}
+}
+
+func TestChainPickerCancelRestoresResult(t *testing.T) {
+	m := chainPickerModel(func(string) (string, string, error) { return "", "", nil })
+	m.state = stateResult
+
+	m.openChainPicker()
+	if m.state != stateChainPicker {
+		t.Fatalf("expected chain picker, got %v", m.state)
+	}
+	m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.state != stateResult {
+		t.Fatalf("cancel returned to %v, want result", m.state)
+	}
+}
+
+func TestChainPickerAliasesAndErrorReset(t *testing.T) {
+	m := chainPickerModel(func(string) (string, string, error) {
+		return "", "", fmt.Errorf("switch failed")
+	})
+
+	m.openChainPicker()
+	typeRunes(m, "matic")
+	if got := m.filteredChains(); len(got) != 1 || got[0].Name != "polygon" {
+		t.Fatalf("alias filter did not find polygon: %+v", got)
+	}
+	m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.chainErr == "" {
+		t.Fatal("expected switch error")
+	}
+	m.handleKey(tea.KeyMsg{Type: tea.KeyUp})
+	if m.chainErr != "" {
+		t.Fatalf("navigation did not clear stale error: %q", m.chainErr)
+	}
+
+	m.chainErr = "switch failed"
+	typeRunes(m, "x")
+	if m.chainErr != "" {
+		t.Fatalf("filter edit did not clear stale error: %q", m.chainErr)
+	}
+
+	m.chainFilter = "é"
+	m.handleKey(tea.KeyMsg{Type: tea.KeyBackspace})
+	if m.chainFilter != "" {
+		t.Fatalf("backspace must remove one rune, got %q", m.chainFilter)
+	}
+}
+
+func TestChainPickerOfficialNameAndPaidOnlyLabel(t *testing.T) {
+	m := chainPickerModel(func(string) (string, string, error) { return "", "", nil })
+	m.cfg.Chains[1].PaidOnly = true
+	m.openChainPicker()
+	m.chainFilter = "Polygon Mainnet"
+
+	if got := m.filteredChains(); len(got) != 1 || got[0].Name != "polygon" {
+		t.Fatalf("official display-name filter did not find polygon: %+v", got)
+	}
+	view := m.viewChainPicker()
+	if !strings.Contains(view, "Polygon Mainnet (137)") || !strings.Contains(view, "(paid only)") {
+		t.Fatalf("picker missing official name or tier label:\n%s", view)
 	}
 }
 

@@ -5,7 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/etherscan/etherscan-cli/internal/chains"
+	"github.com/etherscan/etherscan-cli/internal/client"
 	"github.com/etherscan/etherscan-cli/internal/config"
+	"github.com/etherscan/etherscan-cli/internal/output"
 )
 
 // TestRuntimeRequiresKey guards the API-key-required policy: with no key from
@@ -36,27 +39,38 @@ func TestRuntimeRequiresKey(t *testing.T) {
 	}
 }
 
-// TestRuntimeWithChainOverride: an explicit chain override (from the TUI switcher)
-// wins over the flag/env/config precedence; an empty override keeps the default.
-func TestRuntimeWithChainOverride(t *testing.T) {
-	t.Setenv("ETHERSCAN_API_KEY", "")
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	state := &globalState{apiKey: "TESTKEY", timeout: 5 * time.Second, rate: 3}
-
-	rt, err := runtimeWithChain(state, "polygon")
+func TestRebindRuntimeChainPreservesSession(t *testing.T) {
+	ethereum, err := chains.Resolve("ethereum")
 	if err != nil {
-		t.Fatalf("runtimeWithChain(polygon): %v", err)
+		t.Fatal(err)
 	}
-	if rt.chain.ID != "137" {
-		t.Fatalf("override ignored: got %s (%s)", rt.chain.Name, rt.chain.ID)
+	rt := resolvedRuntime{
+		client: client.New(client.Options{BaseURL: "https://example.test/v2/api", APIKey: "TESTKEY", ChainID: ethereum.ID, RateLimit: 3}),
+		format: output.JSON,
+		chain:  ethereum,
+	}
+	originalClient := rt.client
+
+	chain, err := rebindRuntimeChain(&rt, "matic")
+	if err != nil {
+		t.Fatalf("rebindRuntimeChain(matic): %v", err)
+	}
+	if chain.ID != "137" || rt.chain.ID != chain.ID || rt.chain.Name != chain.Name {
+		t.Fatalf("chain not rebound to polygon: %+v", rt.chain)
+	}
+	if rt.client == originalClient {
+		t.Fatal("chain rebind must use an immutable client clone")
+	}
+	if rt.format != output.JSON {
+		t.Fatalf("chain rebind changed output format to %q", rt.format)
 	}
 
-	rt, err = runtimeWithChain(state, "")
-	if err != nil {
-		t.Fatalf("runtimeWithChain(default): %v", err)
+	currentClient, currentChainID := rt.client, rt.chain.ID
+	if _, err := rebindRuntimeChain(&rt, "not-a-chain"); err == nil {
+		t.Fatal("expected unknown-chain error")
 	}
-	if rt.chain.ID != "1" {
-		t.Fatalf("empty override should default to ethereum: got %s (%s)", rt.chain.Name, rt.chain.ID)
+	if rt.client != currentClient || rt.chain.ID != currentChainID {
+		t.Fatal("failed chain rebind mutated the runtime")
 	}
 }
 

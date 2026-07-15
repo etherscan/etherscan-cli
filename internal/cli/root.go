@@ -207,14 +207,6 @@ func resolveKey(state *globalState, cfg config.File) string {
 }
 
 func runtime(state *globalState) (resolvedRuntime, error) {
-	return runtimeWithChain(state, "")
-}
-
-// runtimeWithChain builds a runtime for an explicit chain. An empty chainOverride
-// keeps the normal precedence (flag > env > config > ethereum); a non-empty value
-// (e.g. from the TUI chain switcher) wins over all of them. Everything else — key,
-// base URL, output format, client options — is resolved identically to runtime().
-func runtimeWithChain(state *globalState, chainOverride string) (resolvedRuntime, error) {
 	cfg, _, err := config.Load()
 	if err != nil {
 		return resolvedRuntime{}, err
@@ -223,7 +215,7 @@ func runtimeWithChain(state *globalState, chainOverride string) (resolvedRuntime
 	if key == "" {
 		return resolvedRuntime{}, errNoAPIKey
 	}
-	chainInput := firstNonEmpty(chainOverride, state.chain, os.Getenv("ETHERSCAN_CHAIN"), cfg.DefaultChain, "ethereum")
+	chainInput := firstNonEmpty(state.chain, os.Getenv("ETHERSCAN_CHAIN"), cfg.DefaultChain, "ethereum")
 	chain, err := chains.Resolve(chainInput)
 	if err != nil {
 		return resolvedRuntime{}, err
@@ -238,6 +230,19 @@ func runtimeWithChain(state *globalState, chainOverride string) (resolvedRuntime
 		format: format,
 		chain:  chain,
 	}, nil
+}
+
+// rebindRuntimeChain changes only the active chain. The cloned client shares the
+// existing limiter and transport, and the runtime keeps its resolved key, base
+// URL, output format, and other session settings.
+func rebindRuntimeChain(rt *resolvedRuntime, nameOrID string) (chains.Chain, error) {
+	chain, err := chains.Resolve(nameOrID)
+	if err != nil {
+		return chains.Chain{}, err
+	}
+	rt.client = rt.client.ForChain(chain.ID)
+	rt.chain = chain
+	return chain, nil
 }
 
 func call(ctx context.Context, c *client.Client, spec EndpointSpec, params map[string]string) (client.Result, error) {
@@ -459,18 +464,24 @@ func configCommand(state *globalState) *cobra.Command {
 
 func chainsCommand() *cobra.Command {
 	cmd := &cobra.Command{Use: "chains", Short: "Manage supported chains"}
-	cmd.AddCommand(&cobra.Command{Use: "list", Short: "List built-in chains", Run: func(cmd *cobra.Command, args []string) {
+	cmd.AddCommand(&cobra.Command{Use: "list", Short: "List supported chains", Run: func(cmd *cobra.Command, args []string) {
 		rows := make([]map[string]string, 0, len(chains.All()))
 		for _, c := range chains.All() {
+			freeTier := "available"
+			if !c.FreeTier {
+				freeTier = "paid only"
+			}
 			rows = append(rows, map[string]string{
-				"id":       c.ID,
-				"name":     c.Name,
-				"symbol":   c.Symbol,
-				"testnet":  fmt.Sprint(c.Testnet),
-				"explorer": c.Explorer,
+				"id":        c.ID,
+				"name":      c.DisplayName,
+				"slug":      c.Name,
+				"free_tier": freeTier,
+				"testnet":   fmt.Sprint(c.Testnet),
+				"symbol":    c.Symbol,
+				"explorer":  c.Explorer,
 			})
 		}
-		_ = output.WriteRows(os.Stdout, rows, output.Table, []string{"id", "name", "symbol", "testnet", "explorer"})
+		_ = output.WriteRows(os.Stdout, rows, output.Table, []string{"id", "name", "slug", "free_tier", "testnet", "symbol", "explorer"})
 	}})
 	return cmd
 }
@@ -553,18 +564,17 @@ func launchTUI(ctx context.Context, state *globalState, info BuildInfo) error {
 	// rt is mutable so the chain switcher can rebind the client mid-session; the
 	// executor and validator capture &rt and therefore see the switched chain.
 	switchChain := func(nameOrID string) (string, string, error) {
-		newRt, err := runtimeWithChain(state, nameOrID)
+		chain, err := rebindRuntimeChain(&rt, nameOrID)
 		if err != nil {
 			return "", "", err
 		}
-		rt = newRt
-		return rt.chain.Name, rt.chain.ID, nil
+		return chain.DisplayName, chain.ID, nil
 	}
 	return tui.Run(ctx, tui.Config{
 		Endpoints:   eps,
 		Exec:        tuiExec(&rt, index),
 		Validate:    tuiValidate(&rt, index),
-		ChainName:   rt.chain.Name,
+		ChainName:   rt.chain.DisplayName,
 		ChainID:     rt.chain.ID,
 		KeyLabel:    keyLabel,
 		Chains:      tuiChains(),
@@ -577,7 +587,10 @@ func tuiChains() []tui.ChainInfo {
 	all := chains.All()
 	out := make([]tui.ChainInfo, 0, len(all))
 	for _, c := range all {
-		out = append(out, tui.ChainInfo{Name: c.Name, ID: c.ID, Testnet: c.Testnet})
+		out = append(out, tui.ChainInfo{
+			Name: c.Name, DisplayName: c.DisplayName, ID: c.ID,
+			Aliases: append([]string(nil), c.Aliases...), Testnet: c.Testnet, PaidOnly: !c.FreeTier,
+		})
 	}
 	return out
 }
