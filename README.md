@@ -59,7 +59,19 @@ curl -fsSL https://raw.githubusercontent.com/etherscan/etherscan-cli/master/inst
 
 ### Windows
 
-Download `windows_amd64.zip` or `windows_arm64.zip` from [GitHub Releases](https://github.com/etherscan/etherscan-cli/releases/latest), extract `etherscan.exe`, and place it in a directory included in `PATH`.
+Run the following in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/etherscan/etherscan-cli/master/install.ps1 | iex
+```
+
+Or run the following in Command Prompt:
+
+```bat
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/etherscan/etherscan-cli/master/install.ps1 | iex"
+```
+
+The installer detects amd64 or arm64, verifies the release checksum, installs to `%LOCALAPPDATA%\Etherscan\bin`, and adds that directory to your user `PATH`. If `etherscan` is not immediately available, open a new terminal.
 
 ### Manual installation
 
