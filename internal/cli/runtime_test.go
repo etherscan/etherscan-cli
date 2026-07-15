@@ -36,6 +36,30 @@ func TestRuntimeRequiresKey(t *testing.T) {
 	}
 }
 
+// TestRuntimeWithChainOverride: an explicit chain override (from the TUI switcher)
+// wins over the flag/env/config precedence; an empty override keeps the default.
+func TestRuntimeWithChainOverride(t *testing.T) {
+	t.Setenv("ETHERSCAN_API_KEY", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	state := &globalState{apiKey: "TESTKEY", timeout: 5 * time.Second, rate: 3}
+
+	rt, err := runtimeWithChain(state, "polygon")
+	if err != nil {
+		t.Fatalf("runtimeWithChain(polygon): %v", err)
+	}
+	if rt.chain.ID != "137" {
+		t.Fatalf("override ignored: got %s (%s)", rt.chain.Name, rt.chain.ID)
+	}
+
+	rt, err = runtimeWithChain(state, "")
+	if err != nil {
+		t.Fatalf("runtimeWithChain(default): %v", err)
+	}
+	if rt.chain.ID != "1" {
+		t.Fatalf("empty override should default to ethereum: got %s (%s)", rt.chain.Name, rt.chain.ID)
+	}
+}
+
 func TestResolveKeyPrecedence(t *testing.T) {
 	t.Setenv("ETHERSCAN_API_KEY", "")
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())

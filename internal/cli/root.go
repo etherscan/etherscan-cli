@@ -207,6 +207,14 @@ func resolveKey(state *globalState, cfg config.File) string {
 }
 
 func runtime(state *globalState) (resolvedRuntime, error) {
+	return runtimeWithChain(state, "")
+}
+
+// runtimeWithChain builds a runtime for an explicit chain. An empty chainOverride
+// keeps the normal precedence (flag > env > config > ethereum); a non-empty value
+// (e.g. from the TUI chain switcher) wins over all of them. Everything else — key,
+// base URL, output format, client options — is resolved identically to runtime().
+func runtimeWithChain(state *globalState, chainOverride string) (resolvedRuntime, error) {
 	cfg, _, err := config.Load()
 	if err != nil {
 		return resolvedRuntime{}, err
@@ -215,7 +223,7 @@ func runtime(state *globalState) (resolvedRuntime, error) {
 	if key == "" {
 		return resolvedRuntime{}, errNoAPIKey
 	}
-	chainInput := firstNonEmpty(state.chain, os.Getenv("ETHERSCAN_CHAIN"), cfg.DefaultChain, "ethereum")
+	chainInput := firstNonEmpty(chainOverride, state.chain, os.Getenv("ETHERSCAN_CHAIN"), cfg.DefaultChain, "ethereum")
 	chain, err := chains.Resolve(chainInput)
 	if err != nil {
 		return resolvedRuntime{}, err
@@ -542,14 +550,36 @@ func launchTUI(ctx context.Context, state *globalState, info BuildInfo) error {
 		keyLabel = maskKey(key)
 	}
 	eps, index := tuiEndpoints()
+	// rt is mutable so the chain switcher can rebind the client mid-session; the
+	// executor and validator capture &rt and therefore see the switched chain.
+	switchChain := func(nameOrID string) (string, string, error) {
+		newRt, err := runtimeWithChain(state, nameOrID)
+		if err != nil {
+			return "", "", err
+		}
+		rt = newRt
+		return rt.chain.Name, rt.chain.ID, nil
+	}
 	return tui.Run(ctx, tui.Config{
-		Endpoints: eps,
-		Exec:      tuiExec(rt, index),
-		Validate:  tuiValidate(rt, index),
-		ChainName: rt.chain.Name,
-		ChainID:   rt.chain.ID,
-		KeyLabel:  keyLabel,
+		Endpoints:   eps,
+		Exec:        tuiExec(&rt, index),
+		Validate:    tuiValidate(&rt, index),
+		ChainName:   rt.chain.Name,
+		ChainID:     rt.chain.ID,
+		KeyLabel:    keyLabel,
+		Chains:      tuiChains(),
+		SwitchChain: switchChain,
 	})
+}
+
+// tuiChains maps the chain registry into the TUI's display list for the switcher.
+func tuiChains() []tui.ChainInfo {
+	all := chains.All()
+	out := make([]tui.ChainInfo, 0, len(all))
+	for _, c := range all {
+		out = append(out, tui.ChainInfo{Name: c.Name, ID: c.ID, Testnet: c.Testnet})
+	}
+	return out
 }
 
 // runSetup runs the TUI first-launch key screen. Its Save closure applies the
@@ -596,7 +626,7 @@ func runSetup(ctx context.Context, state *globalState) error {
 // guards the normal CLI path (endpointCommand RunE) applies, so the TUI cannot
 // bypass the validation the CLI enforces (e.g. empty comma-list entries).
 // chainlist has no module/action or params on the wire, so it passes trivially.
-func tuiValidate(rt resolvedRuntime, index map[string]EndpointSpec) func(module, action string, params map[string]string) error {
+func tuiValidate(rt *resolvedRuntime, index map[string]EndpointSpec) func(module, action string, params map[string]string) error {
 	return func(module, action string, params map[string]string) error {
 		if module == "getapilimit" && action == "chainlist" {
 			return nil
@@ -615,7 +645,7 @@ func tuiValidate(rt resolvedRuntime, index map[string]EndpointSpec) func(module,
 // tuiExec builds the explorer's executor. It re-runs tuiValidate before issuing
 // the request (defense in depth — the form validates on submit, but the executor
 // must not rely on it).
-func tuiExec(rt resolvedRuntime, index map[string]EndpointSpec) tui.Exec {
+func tuiExec(rt *resolvedRuntime, index map[string]EndpointSpec) tui.Exec {
 	validate := tuiValidate(rt, index)
 	return func(ctx context.Context, module, action string, params map[string]string) (json.RawMessage, error) {
 		if err := validate(module, action, params); err != nil {

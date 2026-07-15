@@ -73,6 +73,18 @@ type Config struct {
 	ChainName string
 	ChainID   string
 	KeyLabel  string // masked key, or "none"
+	// Chains is the list offered by the in-TUI chain switcher; SwitchChain applies a
+	// selection (rebuilding the client) and returns the resolved name/id. Both are
+	// optional — a nil SwitchChain disables the switcher entirely.
+	Chains      []ChainInfo
+	SwitchChain func(nameOrID string) (name, id string, err error)
+}
+
+// ChainInfo is one selectable chain in the switcher.
+type ChainInfo struct {
+	Name    string
+	ID      string
+	Testnet bool
 }
 
 // Run launches the full-screen explorer and blocks until the user quits.
@@ -92,6 +104,7 @@ const (
 	stateForm
 	stateFetching
 	stateResult
+	stateChainPicker
 )
 
 type focusCol int
@@ -150,6 +163,11 @@ type model struct {
 	params      map[string]string
 	page        int
 	resultTitle string
+
+	// chain switcher
+	chainIdx    int
+	chainFilter string
+	chainErr    string
 
 	width, height int
 	ready         bool
@@ -254,6 +272,8 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case stateResult:
 		return m.keyResult(msg)
+	case stateChainPicker:
+		return m.keyChainPicker(msg)
 	}
 	return m, nil
 }
@@ -276,6 +296,8 @@ func (m *model) keyBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.epIdx = clamp(m.epIdx+1, 0, len(m.endpointsForSelected())-1)
 		}
+	case "c":
+		return m.openChainPicker()
 	case "left", "h":
 		m.focus = focusModules
 	case "esc":
@@ -434,6 +456,8 @@ func (m *model) keyResult(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc", "left", "h":
 		m.state = stateBrowse
 		return m, nil
+	case "c":
+		return m.openChainPicker()
 	case "n":
 		if m.current.Paginated {
 			m.page++
@@ -448,6 +472,77 @@ func (m *model) keyResult(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.vp, cmd = m.vp.Update(msg)
 	return m, cmd
+}
+
+func (m *model) openChainPicker() (tea.Model, tea.Cmd) {
+	if m.cfg.SwitchChain == nil || len(m.cfg.Chains) == 0 {
+		return m, nil
+	}
+	m.state = stateChainPicker
+	m.chainFilter = ""
+	m.chainErr = ""
+	m.chainIdx = 0
+	return m, nil
+}
+
+// filteredChains returns the chains matching the current filter (case-insensitive
+// substring on name, or a prefix/substring on the numeric id).
+func (m model) filteredChains() []ChainInfo {
+	if m.chainFilter == "" {
+		return m.cfg.Chains
+	}
+	needle := strings.ToLower(m.chainFilter)
+	var out []ChainInfo
+	for _, c := range m.cfg.Chains {
+		if strings.Contains(strings.ToLower(c.Name), needle) || strings.Contains(c.ID, needle) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func (m *model) keyChainPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	list := m.filteredChains()
+	switch msg.Type {
+	case tea.KeyCtrlC:
+		return m, tea.Quit
+	case tea.KeyEsc:
+		m.state = stateBrowse
+		m.chainFilter = ""
+		m.chainErr = ""
+		return m, nil
+	case tea.KeyUp:
+		m.chainIdx = clamp(m.chainIdx-1, 0, max(0, len(list)-1))
+		return m, nil
+	case tea.KeyDown:
+		m.chainIdx = clamp(m.chainIdx+1, 0, max(0, len(list)-1))
+		return m, nil
+	case tea.KeyEnter:
+		if len(list) == 0 {
+			return m, nil
+		}
+		sel := list[clamp(m.chainIdx, 0, len(list)-1)]
+		name, id, err := m.cfg.SwitchChain(sel.Name)
+		if err != nil {
+			m.chainErr = err.Error()
+			return m, nil
+		}
+		m.cfg.ChainName, m.cfg.ChainID = name, id
+		m.chainFilter, m.chainErr = "", ""
+		m.state = stateBrowse
+		return m, nil
+	case tea.KeyBackspace:
+		if m.chainFilter != "" {
+			m.chainFilter = m.chainFilter[:len(m.chainFilter)-1]
+			m.chainIdx = 0
+		}
+		return m, nil
+	case tea.KeyRunes:
+		m.chainFilter += string(msg.Runes)
+		m.chainIdx = 0
+		return m, nil
+	}
+	return m, nil
 }
 
 func (m *model) setResult(raw json.RawMessage, err error) {
@@ -495,9 +590,57 @@ func (m model) View() string {
 		return m.viewFetching()
 	case stateResult:
 		return m.viewResult()
+	case stateChainPicker:
+		return m.viewChainPicker()
 	default:
 		return m.viewBrowse()
 	}
+}
+
+func (m model) viewChainPicker() string {
+	list := m.filteredChains()
+	var b strings.Builder
+	b.WriteString(headSt.Render("Switch chain") + "\n")
+	b.WriteString(descSt.Render(fmt.Sprintf("current: %s (%s)", m.cfg.ChainName, m.cfg.ChainID)) + "\n\n")
+	b.WriteString(labelSt.Render("filter: ") + m.chainFilter + "\n\n")
+	if len(list) == 0 {
+		b.WriteString(descSt.Render("(no matching chains)") + "\n")
+	} else {
+		visible := 10
+		if m.height > 0 {
+			if v := m.height - 12; v >= 1 {
+				visible = v
+			} else {
+				visible = 1
+			}
+		}
+		idx := clamp(m.chainIdx, 0, len(list)-1)
+		start, end := windowIndices(len(list), visible, idx)
+		if start > 0 {
+			b.WriteString(descSt.Render(fmt.Sprintf("… %d above", start)) + "\n")
+		}
+		for i := start; i < end; i++ {
+			c := list[i]
+			line := fmt.Sprintf("%s (%s)", c.Name, c.ID)
+			suffix := ""
+			if c.Testnet {
+				suffix = " (testnet)"
+			}
+			if i == idx {
+				b.WriteString(selSt.Render("› "+line+suffix) + "\n")
+			} else {
+				b.WriteString("  " + line + descSt.Render(suffix) + "\n")
+			}
+		}
+		if end < len(list) {
+			b.WriteString(descSt.Render(fmt.Sprintf("… %d more", len(list)-end)) + "\n")
+		}
+	}
+	if m.chainErr != "" {
+		b.WriteString("\n" + errSt.Render(m.chainErr) + "\n")
+	}
+	foot := m.footer("type to filter · ↑/↓ move · enter switch · esc cancel")
+	return join(m.header(), "", b.String(), foot)
 }
 
 func (m model) header() string {
@@ -582,8 +725,11 @@ func (m model) viewBrowse() string {
 	epPanel := panelSt.Width(epW).Render(epLines)
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top, modPanel, " ", epPanel)
-	foot := m.footer("↑/↓ move · ←/→ pane · enter open · esc/q quit")
-	return join(m.header(), "", banner, "", body, "", foot)
+	keys := "↑/↓ move · ←/→ pane · enter open · esc/q quit"
+	if m.cfg.SwitchChain != nil {
+		keys = "↑/↓ move · ←/→ pane · enter open · c chain · esc/q quit"
+	}
+	return join(m.header(), "", banner, "", body, "", m.footer(keys))
 }
 
 // windowIndices returns the [start, end) slice of a total-item list that fits in
@@ -664,6 +810,9 @@ func (m model) viewResult() string {
 	keys := "↑/↓ scroll · esc back · q quit"
 	if m.current.Paginated {
 		keys = fmt.Sprintf("↑/↓ scroll · n/p page (%d) · esc back · q quit", m.page)
+	}
+	if m.cfg.SwitchChain != nil {
+		keys += " · c chain"
 	}
 	return join(m.header(), "", headSt.Render(m.resultTitle), "", m.vp.View(), "", m.footer(keys))
 }

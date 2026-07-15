@@ -281,6 +281,95 @@ func TestFormValidateHookInline(t *testing.T) {
 	}
 }
 
+func chainPickerModel(switchChain func(string) (string, string, error)) *model {
+	cfg := Config{
+		Endpoints: []Endpoint{{Module: "account", Action: "balance", Title: "balance"}},
+		Exec: func(context.Context, string, string, map[string]string) (json.RawMessage, error) {
+			return json.RawMessage(`[]`), nil
+		},
+		ChainName: "ethereum", ChainID: "1", KeyLabel: "none",
+		Chains: []ChainInfo{
+			{Name: "ethereum", ID: "1"},
+			{Name: "polygon", ID: "137"},
+			{Name: "sepolia", ID: "11155111", Testnet: true},
+		},
+		SwitchChain: switchChain,
+	}
+	m := newModel(context.Background(), cfg)
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	return &m
+}
+
+func typeRunes(m *model, s string) {
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)})
+}
+
+// TestChainPickerSwitch: open the picker, filter, select — the SwitchChain callback
+// receives the choice and the displayed chain updates, returning to browse.
+func TestChainPickerSwitch(t *testing.T) {
+	var gotArg string
+	m := chainPickerModel(func(nameOrID string) (string, string, error) {
+		gotArg = nameOrID
+		return "polygon", "137", nil
+	})
+
+	typeRunes(m, "c") // open from browse
+	if m.state != stateChainPicker {
+		t.Fatalf("expected chain picker, got %v", m.state)
+	}
+	typeRunes(m, "polyg") // "pol" alone would also match sePOLia
+	if got := m.filteredChains(); len(got) != 1 || got[0].Name != "polygon" {
+		t.Fatalf("filter did not narrow to polygon: %+v", got)
+	}
+	m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if gotArg != "polygon" {
+		t.Fatalf("SwitchChain called with %q, want polygon", gotArg)
+	}
+	if m.cfg.ChainName != "polygon" || m.cfg.ChainID != "137" {
+		t.Fatalf("displayed chain not updated: %s (%s)", m.cfg.ChainName, m.cfg.ChainID)
+	}
+	if m.state != stateBrowse {
+		t.Fatalf("expected return to browse after switch, got %v", m.state)
+	}
+}
+
+// TestChainPickerFilterAndCancel: a non-matching filter empties the list and enter
+// is a no-op; esc cancels without switching.
+func TestChainPickerFilterAndCancel(t *testing.T) {
+	called := false
+	m := chainPickerModel(func(string) (string, string, error) { called = true; return "", "", nil })
+
+	typeRunes(m, "c")
+	typeRunes(m, "zzz")
+	if len(m.filteredChains()) != 0 {
+		t.Fatalf("expected no matches for 'zzz', got %d", len(m.filteredChains()))
+	}
+	m.handleKey(tea.KeyMsg{Type: tea.KeyEnter}) // empty selection → no-op
+	if called {
+		t.Fatal("SwitchChain called on an empty selection")
+	}
+	m.handleKey(tea.KeyMsg{Type: tea.KeyBackspace}) // trims one char, still no match
+	m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	if called {
+		t.Fatal("SwitchChain called after cancel")
+	}
+	if m.state != stateBrowse || m.chainFilter != "" {
+		t.Fatalf("esc should restore browse and clear filter: state=%v filter=%q", m.state, m.chainFilter)
+	}
+}
+
+// TestChainPickerDisabledWithoutCallback: 'c' is inert when no SwitchChain is wired.
+func TestChainPickerDisabledWithoutCallback(t *testing.T) {
+	m := testModel(func(context.Context, string, string, map[string]string) (json.RawMessage, error) {
+		return json.RawMessage(`[]`), nil
+	})
+	typeRunes(m, "c")
+	if m.state == stateChainPicker {
+		t.Fatal("picker opened despite nil SwitchChain")
+	}
+}
+
 // TestFormViewFitsTerminal: a many-field form (getLogs-sized) must window its
 // inputs to the terminal height — Bubble Tea trims overflow from the top, which
 // would delete the header — while keeping the focused input visible.

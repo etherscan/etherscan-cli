@@ -20,7 +20,7 @@ import (
 func TestTuiExecValidatesBeforeCall(t *testing.T) {
 	_, index := tuiEndpoints()
 	rt := resolvedRuntime{chain: chains.Chain{ID: "1", Name: "ethereum"}}
-	exec := tuiExec(rt, index)
+	exec := tuiExec(&rt, index)
 
 	valid := "0x80f3950a4d371c43360f292a4170624abd9eed03"
 	_, err := exec(context.Background(), "account", "balancemulti", map[string]string{"address": valid + ",," + valid})
@@ -38,7 +38,7 @@ func TestTuiExecValidatesBeforeCall(t *testing.T) {
 func TestTuiExecMainnetOnlyGuard(t *testing.T) {
 	_, index := tuiEndpoints()
 	rt := resolvedRuntime{chain: chains.Chain{ID: "56", Name: "bsc"}}
-	exec := tuiExec(rt, index)
+	exec := tuiExec(&rt, index)
 
 	_, err := exec(context.Background(), "stats", "ethsupply2", map[string]string{})
 	if err == nil {
@@ -55,7 +55,7 @@ func TestTuiExecMainnetOnlyGuard(t *testing.T) {
 func TestTuiValidate(t *testing.T) {
 	_, index := tuiEndpoints()
 	rt := resolvedRuntime{chain: chains.Chain{ID: "1", Name: "ethereum"}}
-	validate := tuiValidate(rt, index)
+	validate := tuiValidate(&rt, index)
 
 	valid := "0x80f3950a4d371c43360f292a4170624abd9eed03"
 	if err := validate("account", "txlist", map[string]string{"address": valid, "sort": "up"}); err == nil || !strings.Contains(err.Error(), "sort must be asc or desc") {
@@ -75,6 +75,24 @@ func TestTuiValidate(t *testing.T) {
 	}
 	if err := validate("account", "nosuch", nil); err == nil {
 		t.Fatal("unknown endpoint must be rejected")
+	}
+}
+
+// TestTuiValidateReflectsChainSwitch proves the pointer wiring behind the chain
+// switcher: tuiValidate captures &rt, so mutating rt.chain (as switchChain does)
+// re-gates MainnetOnly endpoints without rebuilding the closure.
+func TestTuiValidateReflectsChainSwitch(t *testing.T) {
+	_, index := tuiEndpoints()
+	rt := resolvedRuntime{chain: chains.Chain{ID: "1", Name: "ethereum"}}
+	validate := tuiValidate(&rt, index)
+
+	if err := validate("stats", "ethsupply2", map[string]string{}); err != nil {
+		t.Fatalf("mainnet-only endpoint rejected on mainnet: %v", err)
+	}
+	// Simulate a chain switch (switchChain assigns a new rt through &rt).
+	rt.chain = chains.Chain{ID: "56", Name: "bsc"}
+	if err := validate("stats", "ethsupply2", map[string]string{}); err == nil || !strings.Contains(err.Error(), "only supported on Ethereum mainnet") {
+		t.Fatalf("mainnet-only guard did not follow the chain switch: %v", err)
 	}
 }
 
@@ -151,7 +169,7 @@ func TestTuiExecChainList(t *testing.T) {
 		chain:  chains.Chain{ID: "1", Name: "ethereum"},
 	}
 	// Empty index on purpose: chainlist must not need a spec entry.
-	exec := tuiExec(rt, map[string]EndpointSpec{})
+	exec := tuiExec(&rt, map[string]EndpointSpec{})
 	raw, err := exec(context.Background(), "getapilimit", "chainlist", nil)
 	if err != nil {
 		t.Fatal(err)
