@@ -28,11 +28,6 @@ jobs:
       - name: Test
         run: go test ./...
 
-      - name: Install Syft
-        uses: anchore/sbom-action/download-syft@v0
-        with:
-          syft-version: v1.44.0
-
       - name: Release with GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:

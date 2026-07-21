@@ -44,10 +44,6 @@ archives:
 checksum:
   name_template: checksums.txt
 
-sboms:
-  - id: archives
-    artifacts: archive
-
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
