@@ -4,9 +4,6 @@ project_name: etherscan
 
 report_sizes: true
 
-gomod:
-  proxy: true
-
 builds:
   - id: etherscan
     main: ./cmd/etherscan
