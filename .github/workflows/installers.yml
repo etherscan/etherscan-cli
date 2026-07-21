@@ -1,0 +1,40 @@
+name: Installers
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  powershell:
+    name: Windows PowerShell
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Test PowerShell installer
+        shell: pwsh
+        run: ./scripts/test-install.ps1
+
+  shell:
+    name: ${{ matrix.os }} shell
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Test shell installer
+        run: sh ./scripts/test-install.sh

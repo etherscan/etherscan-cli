@@ -6,7 +6,25 @@ Etherscan's API documentation remains as the main reference for endpoint paramet
 
 ## Installation
 
-Download a prebuilt binary from [GitHub Releases](https://github.com/etherscan/etherscan-cli/releases)
+### Windows
+
+```powershell
+irm https://raw.githubusercontent.com/etherscan/etherscan-cli/master/scripts/install.ps1 | iex
+```
+
+### macOS and Linux
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/etherscan/etherscan-cli/master/scripts/install.sh | sh
+```
+
+The installers select the correct binary, verify its checksum, and add `etherscan` to your `PATH`. Open a new terminal after installation.
+
+### Manual installation
+
+Download the appropriate archive and `checksums.txt` from [GitHub Releases](https://github.com/etherscan/etherscan-cli/releases). Verify the checksum, extract the archive, and place `etherscan` on your `PATH`.
+
+If installation fails, [open a GitHub issue](https://github.com/etherscan/etherscan-cli/issues/new).
 
 ## Quickstart
 
