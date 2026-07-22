@@ -198,17 +198,28 @@ func loadState(path string) state {
 }
 
 func saveState(path string, st state) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	// Write to a sibling temp file and rename over the target so a concurrent CLI
+	// launch (e.g. two terminals on the same day) can never observe a torn file.
+	f, err := os.CreateTemp(dir, ".update-state-*.json")
 	if err != nil {
 		return err
 	}
+	tmp := f.Name()
 	err = json.NewEncoder(f).Encode(st)
-	closeErr := f.Close()
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
 	if err != nil {
+		os.Remove(tmp)
 		return err
 	}
-	return closeErr
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
 }

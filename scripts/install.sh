@@ -186,7 +186,10 @@ if [ "$update_path" -eq 1 ]; then
                 path_line="export PATH=\"$escaped_install_dir:\$PATH\""
             fi
 
-            if ! [ -f "$profile" ] || ! grep -F -e "$install_dir" "$profile" >/dev/null 2>&1; then
+            # Match the exact line we would write (whole-line, fixed-string) so an
+            # unrelated profile line that merely contains the path does not suppress
+            # the update, and a genuine duplicate is not appended.
+            if ! [ -f "$profile" ] || ! grep -Fx -e "$path_line" "$profile" >/dev/null 2>&1; then
                 {
                     printf '\n# Etherscan CLI\n'
                     printf '%s\n' "$path_line"

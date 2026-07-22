@@ -33,6 +33,16 @@ curl -fsSL https://raw.githubusercontent.com/etherscan/etherscan-cli/master/scri
 
 The installers select the correct binary, verify its checksum, and add `etherscan` to your `PATH`. Open a new terminal after installation.
 
+### Go install
+
+With a Go toolchain installed, build from source:
+
+```sh
+go install github.com/etherscan/etherscan-cli/cmd/etherscan@latest
+```
+
+This installs `etherscan` into your `$GOBIN` (or `$(go env GOPATH)/bin`); make sure that directory is on your `PATH`.
+
 ### Manual installation
 
 Download the appropriate archive and `checksums.txt` from [GitHub Releases](https://github.com/etherscan/etherscan-cli/releases). Verify the checksum, extract the archive, and place `etherscan` on your `PATH`.
@@ -46,6 +56,16 @@ Update to the latest stable release with:
 ```sh
 etherscan update
 ```
+
+The interactive explorer also checks for a newer release at most once per day on its
+first launch and offers to update; it never checks during scripted or endpoint commands.
+To disable the automatic check, set `ETHERSCAN_NO_UPDATE_CHECK` to any non-empty value:
+
+```sh
+export ETHERSCAN_NO_UPDATE_CHECK=1
+```
+
+Running `etherscan update` explicitly still checks for a new release even when this is set.
 
 ## Quickstart
 

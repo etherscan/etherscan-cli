@@ -589,13 +589,15 @@ func offerUpdate(ctx context.Context, updates updateManager, current string, in 
 	fmt.Fprintln(out, "\n1. Update now")
 	fmt.Fprintln(out, "2. Later")
 	fmt.Fprintln(out, "3. Skip this version")
-	fmt.Fprint(out, "\nChoose [1]: ")
+	fmt.Fprint(out, "\nChoose [2]: ")
 	choice, readErr := bufio.NewReader(in).ReadString('\n')
 	if readErr != nil && !errors.Is(readErr, io.EOF) {
 		return false, nil
 	}
+	// Enter (empty) defaults to Later so a reflexive keypress on the way into the
+	// explorer never kicks off a self-update; only an explicit "1" updates.
 	switch strings.TrimSpace(choice) {
-	case "", "1":
+	case "1":
 		method := updates.DetectMethod()
 		fmt.Fprintf(out, "Updating with %s...\n", method)
 		background, err := updates.Upgrade(ctx, method, result.Latest, out, errOut)

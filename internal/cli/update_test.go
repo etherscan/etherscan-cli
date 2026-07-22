@@ -63,6 +63,14 @@ func TestOfferUpdateChoices(t *testing.T) {
 		}
 	})
 
+	t.Run("enter defaults to later", func(t *testing.T) {
+		manager := &fakeUpdateManager{result: result, method: updater.MethodScript}
+		exit, err := offerUpdate(context.Background(), manager, "1.1.0", strings.NewReader("\n"), &bytes.Buffer{}, &bytes.Buffer{})
+		if err != nil || exit || manager.skipped != "" || manager.upgradedVersion != "" {
+			t.Fatalf("empty input should default to Later: exit=%v err=%v manager=%+v", exit, err, manager)
+		}
+	})
+
 	t.Run("update", func(t *testing.T) {
 		manager := &fakeUpdateManager{result: result, method: updater.MethodHomebrew}
 		exit, err := offerUpdate(context.Background(), manager, "1.1.0", strings.NewReader("1\n"), &bytes.Buffer{}, &bytes.Buffer{})
