@@ -6,9 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/etherscan/etherscan-cli/actions/workflows/test.yml"><img alt="Test status" src="https://github.com/etherscan/etherscan-cli/actions/workflows/test.yml/badge.svg?branch=master"></a>
-  <a href="https://github.com/etherscan/etherscan-cli/actions/workflows/installers.yml"><img alt="Installer test status" src="https://github.com/etherscan/etherscan-cli/actions/workflows/installers.yml/badge.svg?branch=master"></a>
-  <a href="https://github.com/etherscan/etherscan-cli/actions/workflows/release.yml"><img alt="Release status" src="https://github.com/etherscan/etherscan-cli/actions/workflows/release.yml/badge.svg"></a>
+  <img width="100%" alt="Etherscan CLI interactive explorer" src="https://github.com/user-attachments/assets/98332d40-dda7-415c-8664-8e9c16fa71f4">
 </p>
 
 <p align="center">
