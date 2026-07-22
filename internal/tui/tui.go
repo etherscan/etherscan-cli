@@ -73,6 +73,11 @@ type Config struct {
 	ChainName string
 	ChainID   string
 	KeyLabel  string // masked key, or "none"
+	HasAPIKey bool
+	// SaveAPIKey validates and persists a key, returning its masked display label.
+	// When provided, API-backed endpoints open an in-TUI setup prompt if HasAPIKey
+	// is false. Bare endpoints remain available without credentials.
+	SaveAPIKey func(ctx context.Context, key string) (label string, err error)
 	// Chains is the list offered by the in-TUI chain switcher; SwitchChain applies a
 	// selection (rebinding the client) and returns the resolved display name/id. Both are
 	// optional — a nil SwitchChain disables the switcher entirely.
@@ -108,6 +113,7 @@ const (
 	stateFetching
 	stateResult
 	stateChainPicker
+	stateAPIKey
 )
 
 type focusCol int
@@ -120,6 +126,11 @@ const (
 type resultMsg struct {
 	raw json.RawMessage
 	err error
+}
+
+type apiKeySavedMsg struct {
+	label string
+	err   error
 }
 
 var (
@@ -172,6 +183,12 @@ type model struct {
 	chainFilter string
 	chainErr    string
 	chainReturn viewState
+
+	// just-in-time API-key setup
+	keyInput  textinput.Model
+	keySaving bool
+	keyErr    string
+	keyReturn viewState
 
 	width, height int
 	ready         bool
@@ -231,7 +248,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case spinner.TickMsg:
-		if m.state == stateFetching {
+		if m.state == stateFetching || (m.state == stateAPIKey && m.keySaving) {
 			var cmd tea.Cmd
 			m.spin, cmd = m.spin.Update(msg)
 			return m, cmd
@@ -241,6 +258,18 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case resultMsg:
 		m.setResult(msg.raw, msg.err)
 		return m, nil
+
+	case apiKeySavedMsg:
+		m.keySaving = false
+		if msg.err != nil {
+			m.keyErr = msg.err.Error()
+			m.keyInput.Focus()
+			return m, textinput.Blink
+		}
+		m.cfg.HasAPIKey = true
+		m.cfg.KeyLabel = msg.label
+		m.keyInput.SetValue("")
+		return m.startFetch()
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -259,6 +288,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.vp, cmd = m.vp.Update(msg)
 		return m, cmd
+	case stateAPIKey:
+		if !m.keySaving {
+			var cmd tea.Cmd
+			m.keyInput, cmd = m.keyInput.Update(msg)
+			return m, cmd
+		}
 	}
 	return m, nil
 }
@@ -278,6 +313,8 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyResult(msg)
 	case stateChainPicker:
 		return m.keyChainPicker(msg)
+	case stateAPIKey:
+		return m.keyAPIKey(msg)
 	}
 	return m, nil
 }
@@ -424,12 +461,65 @@ func (m *model) submitForm() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) startFetch() (tea.Model, tea.Cmd) {
+	if !m.current.Bare && !m.cfg.HasAPIKey && m.cfg.SaveAPIKey != nil {
+		return m.openAPIKey()
+	}
 	m.state = stateFetching
 	m.resultTitle = m.current.Module + "/" + m.current.Action
 	if m.current.Bare {
 		m.resultTitle = m.current.Action
 	}
 	return m, tea.Batch(m.spin.Tick, m.fetchCmd())
+}
+
+func (m *model) openAPIKey() (tea.Model, tea.Cmd) {
+	m.keyReturn = m.state
+	m.keyErr = ""
+	m.keySaving = false
+	ti := textinput.New()
+	ti.Placeholder = "paste your API key"
+	ti.Prompt = "› "
+	ti.Focus()
+	m.keyInput = ti
+	m.state = stateAPIKey
+	return m, textinput.Blink
+}
+
+func (m *model) keyAPIKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.keySaving {
+		if msg.String() == "ctrl+c" {
+			m.keyInput.SetValue("")
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+	switch msg.String() {
+	case "ctrl+c":
+		m.keyInput.SetValue("")
+		return m, tea.Quit
+	case "esc":
+		m.keyInput.SetValue("")
+		m.keyErr = ""
+		m.state = m.keyReturn
+		return m, nil
+	case "enter":
+		key := strings.TrimSpace(m.keyInput.Value())
+		if key == "" {
+			m.keyErr = "API key is required"
+			return m, nil
+		}
+		m.keyErr = ""
+		m.keySaving = true
+		m.keyInput.Blur()
+		save, ctx := m.cfg.SaveAPIKey, m.ctx
+		return m, tea.Batch(m.spin.Tick, func() tea.Msg {
+			label, err := save(ctx, key)
+			return apiKeySavedMsg{label: label, err: err}
+		})
+	}
+	var cmd tea.Cmd
+	m.keyInput, cmd = m.keyInput.Update(msg)
+	return m, cmd
 }
 
 func (m *model) fetchCmd() tea.Cmd {
@@ -607,9 +697,27 @@ func (m model) View() string {
 		return m.viewResult()
 	case stateChainPicker:
 		return m.viewChainPicker()
+	case stateAPIKey:
+		return m.viewAPIKey()
 	default:
 		return m.viewBrowse()
 	}
+}
+
+func (m model) viewAPIKey() string {
+	var b strings.Builder
+	b.WriteString(headSt.Render("Connect your API key") + "\n")
+	b.WriteString(subSt.Render("An API key is needed to run this endpoint. You can keep exploring without one.") + "\n")
+	b.WriteString(subSt.Render("Get a free key at https://etherscan.io/apis") + "\n\n")
+	if m.keySaving {
+		b.WriteString(m.spin.View() + " validating key…\n")
+	} else {
+		b.WriteString(m.keyInput.View() + "\n")
+		if m.keyErr != "" {
+			b.WriteString("\n" + errSt.Render(m.keyErr) + "\n")
+		}
+	}
+	return join(m.header(), "", b.String(), m.footer("enter save & continue · esc keep exploring"))
 }
 
 func (m model) viewChainPicker() string {

@@ -166,7 +166,7 @@ func TestTuiExecChainList(t *testing.T) {
 	defer srv.Close()
 
 	rt := resolvedRuntime{
-		client: client.New(client.Options{BaseURL: srv.URL + "/v2/api", APIKey: "k", ChainID: "1", RateLimit: 1000}),
+		client: client.New(client.Options{BaseURL: srv.URL + "/v2/api", ChainID: "1", RateLimit: 1000}),
 		chain:  chains.Chain{ID: "1", Name: "ethereum"},
 	}
 	// Empty index on purpose: chainlist must not need a spec entry.

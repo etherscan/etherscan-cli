@@ -231,6 +231,13 @@ func runtime(state *globalState) (resolvedRuntime, error) {
 	if key == "" {
 		return resolvedRuntime{}, errNoAPIKey
 	}
+	return buildRuntime(state, cfg, key)
+}
+
+// buildRuntime constructs the shared runtime from already-loaded configuration.
+// Most CLI commands call runtime(), which rejects an empty key first. The TUI is
+// the sole caller allowed to pass an empty key so users can browse before setup.
+func buildRuntime(state *globalState, cfg config.File, key string) (resolvedRuntime, error) {
 	chainInput := firstNonEmpty(state.chain, os.Getenv("ETHERSCAN_CHAIN"), cfg.DefaultChain, "ethereum")
 	chain, err := chains.Resolve(chainInput)
 	if err != nil {
@@ -639,26 +646,22 @@ func interactiveTTY() bool {
 }
 
 // launchTUI resolves the runtime once and hands the interactive explorer the
-// endpoint list plus an executor that reuses the existing client/call path. With
-// no key resolved it runs the first-launch setup screen first; a key saved there
-// lands in the config file, so the runtime resolution below picks it up.
+// endpoint list plus an executor that reuses the existing client/call path. An
+// empty key is allowed here so first-time users can explore locally; the TUI asks
+// for and validates a key only when an API-backed endpoint is submitted.
 func launchTUI(ctx context.Context, state *globalState, info BuildInfo) error {
 	cfg, _, err := config.Load()
 	if err != nil {
 		return err
 	}
-	if resolveKey(state, cfg) == "" {
-		if err := runSetup(ctx, state); err != nil {
-			return err
-		}
-		cfg, _, _ = config.Load()
-	}
-	rt, err := runtime(state)
+	key := resolveKey(state, cfg)
+	rt, err := buildRuntime(state, cfg, key)
 	if err != nil {
 		return err
 	}
+	baseURL := firstNonEmpty(state.baseURL, os.Getenv("ETHERSCAN_BASE_URL"), cfg.BaseURL, client.DefaultBaseURL)
 	keyLabel := "none"
-	if key := resolveKey(state, cfg); key != "" {
+	if key != "" {
 		keyLabel = maskKey(key)
 	}
 	eps, index := tuiEndpoints()
@@ -671,6 +674,30 @@ func launchTUI(ctx context.Context, state *globalState, info BuildInfo) error {
 		}
 		return chain.DisplayName, chain.ID, nil
 	}
+	saveKey := func(ctx context.Context, key string) (string, error) {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			return "", errors.New("empty API key")
+		}
+		if err := checkKeyShape(key); err != nil {
+			return "", err
+		}
+		if err := validateKeyLive(ctx, state, key, rt.chain.ID, baseURL); err != nil {
+			return "", err
+		}
+		latest, _, err := config.Load()
+		if err != nil {
+			return "", err
+		}
+		latest.BaseURL = baseURL
+		latest.DefaultChain = rt.chain.Name
+		config.StoreAPIKey(key, &latest)
+		if _, err := config.Save(latest); err != nil {
+			return "", err
+		}
+		rt.client = rt.client.WithAPIKey(key)
+		return maskKey(key), nil
+	}
 	return tui.Run(ctx, tui.Config{
 		Endpoints:   eps,
 		Exec:        tuiExec(&rt, index),
@@ -678,6 +705,8 @@ func launchTUI(ctx context.Context, state *globalState, info BuildInfo) error {
 		ChainName:   rt.chain.DisplayName,
 		ChainID:     rt.chain.ID,
 		KeyLabel:    keyLabel,
+		HasAPIKey:   key != "",
+		SaveAPIKey:  saveKey,
 		Chains:      tuiChains(),
 		SwitchChain: switchChain,
 	})
@@ -694,45 +723,6 @@ func tuiChains() []tui.ChainInfo {
 		})
 	}
 	return out
-}
-
-// runSetup runs the TUI first-launch key screen. Its Save closure applies the
-// same shape check, live validation, and persistence as `etherscan login`, so a
-// key accepted here behaves identically to one saved via login.
-func runSetup(ctx context.Context, state *globalState) error {
-	save := func(ctx context.Context, key string) error {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			return errors.New("empty API key")
-		}
-		if err := checkKeyShape(key); err != nil {
-			return err
-		}
-		cfg, _, err := config.Load()
-		if err != nil {
-			return err
-		}
-		chain, err := chains.Resolve(firstNonEmpty(state.chain, cfg.DefaultChain, "ethereum"))
-		if err != nil {
-			return err
-		}
-		baseURL := firstNonEmpty(state.baseURL, cfg.BaseURL, client.DefaultBaseURL)
-		if err := validateKeyLive(ctx, state, key, chain.ID, baseURL); err != nil {
-			return err
-		}
-		cfg.BaseURL = baseURL
-		cfg.DefaultChain = chain.Name
-		config.StoreAPIKey(key, &cfg)
-		_, err = config.Save(cfg)
-		return err
-	}
-	if err := tui.RunSetup(ctx, tui.SetupConfig{Save: save}); err != nil {
-		if errors.Is(err, tui.ErrSetupAborted) {
-			return errNoAPIKey
-		}
-		return err
-	}
-	return nil
 }
 
 // tuiValidate builds the pre-call guard shared by the TUI form (inline errors on
