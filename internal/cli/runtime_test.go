@@ -39,6 +39,18 @@ func TestRuntimeRequiresKey(t *testing.T) {
 	}
 }
 
+func TestBuildRuntimeAllowsEmptyKeyForTUI(t *testing.T) {
+	t.Setenv("ETHERSCAN_API_KEY", "")
+	state := &globalState{timeout: 5 * time.Second, rate: 3}
+	rt, err := buildRuntime(state, config.File{}, "")
+	if err != nil {
+		t.Fatalf("keyless TUI runtime failed: %v", err)
+	}
+	if rt.client == nil || rt.chain.ID != "1" {
+		t.Fatalf("incomplete keyless runtime: client=%v chain=%+v", rt.client, rt.chain)
+	}
+}
+
 func TestRebindRuntimeChainPreservesSession(t *testing.T) {
 	ethereum, err := chains.Resolve("ethereum")
 	if err != nil {

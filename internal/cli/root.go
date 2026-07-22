@@ -19,6 +19,7 @@ import (
 	"github.com/etherscan/etherscan-cli/internal/config"
 	"github.com/etherscan/etherscan-cli/internal/output"
 	"github.com/etherscan/etherscan-cli/internal/tui"
+	"github.com/etherscan/etherscan-cli/internal/updater"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -47,7 +48,18 @@ type globalState struct {
 	all      bool
 }
 
+type updateManager interface {
+	Check(context.Context, string, bool) (updater.Result, error)
+	Skip(string) error
+	DetectMethod() string
+	Upgrade(context.Context, string, string, io.Writer, io.Writer) (bool, error)
+}
+
 func NewRootCommand(info BuildInfo) *cobra.Command {
+	return newRootCommand(info, updater.NewService())
+}
+
+func newRootCommand(info BuildInfo, updates updateManager) *cobra.Command {
 	state := &globalState{timeout: 30 * time.Second, rate: 3, maxPages: 20}
 	root := &cobra.Command{
 		Use:           "etherscan",
@@ -60,6 +72,10 @@ func NewRootCommand(info BuildInfo) *cobra.Command {
 			// piped/redirected (agents, scripts, CI) it prints a plain text splash so
 			// nothing hangs waiting for keypresses.
 			if interactiveTTY() {
+				exit, err := offerUpdate(cmd.Context(), updates, info.Version, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+				if err != nil || exit {
+					return err
+				}
 				return launchTUI(cmd.Context(), state, info)
 			}
 			printSplash(cmd.OutOrStdout(), info)
@@ -83,7 +99,7 @@ func NewRootCommand(info BuildInfo) *cobra.Command {
 	root.PersistentFlags().IntVar(&state.maxPages, "max-pages", 20, "maximum pages for --all")
 	hideFlags(root, "apikey", "base-url", "compact", "max-pages", "rate-limit", "timeout", "verbose", "debug", "yes")
 
-	root.AddCommand(loginCommand(state), logoutCommand(state), uninstallCommand(state), configCommand(state), chainsCommand(), whoamiCommand(state), versionCommand(info), tuiCommand(state, info), completionCommand(root))
+	root.AddCommand(loginCommand(state), logoutCommand(state), uninstallCommand(state), configCommand(state), chainsCommand(), whoamiCommand(state), versionCommand(info), updateCommand(info, updates), tuiCommand(state, info, updates), completionCommand(root))
 	addEndpointCommands(root, state)
 	return root
 }
@@ -215,6 +231,13 @@ func runtime(state *globalState) (resolvedRuntime, error) {
 	if key == "" {
 		return resolvedRuntime{}, errNoAPIKey
 	}
+	return buildRuntime(state, cfg, key)
+}
+
+// buildRuntime constructs the shared runtime from already-loaded configuration.
+// Most CLI commands call runtime(), which rejects an empty key first. The TUI is
+// the sole caller allowed to pass an empty key so users can browse before setup.
+func buildRuntime(state *globalState, cfg config.File, key string) (resolvedRuntime, error) {
 	chainInput := firstNonEmpty(state.chain, os.Getenv("ETHERSCAN_CHAIN"), cfg.DefaultChain, "ethereum")
 	chain, err := chains.Resolve(chainInput)
 	if err != nil {
@@ -516,7 +539,90 @@ func versionCommand(info BuildInfo) *cobra.Command {
 	}}
 }
 
-func tuiCommand(state *globalState, info BuildInfo) *cobra.Command {
+func updateCommand(info BuildInfo, updates updateManager) *cobra.Command {
+	var method string
+	cmd := &cobra.Command{
+		Use:   "update",
+		Short: "Update Etherscan CLI to the latest stable release",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if method != "" && !updater.ValidMethod(method) {
+				return fmt.Errorf("unsupported update method %q (use homebrew or script)", method)
+			}
+			result, err := updates.Check(cmd.Context(), info.Version, true)
+			if err != nil {
+				return err
+			}
+			if !result.UpdateAvailable {
+				fmt.Fprintf(cmd.OutOrStdout(), "Etherscan CLI %s is already up to date.\n", result.Current)
+				return nil
+			}
+			if method == "" {
+				method = updates.DetectMethod()
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Updating Etherscan CLI %s -> %s using %s...\n", result.Current, result.Latest, method)
+			background, err := updates.Upgrade(cmd.Context(), method, result.Latest, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			if err != nil {
+				return err
+			}
+			if background {
+				fmt.Fprintln(cmd.OutOrStdout(), "The update will finish after this process exits.")
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "Etherscan CLI %s installed. Restart the CLI to use it.\n", result.Latest)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&method, "method", "", "update method: homebrew or script")
+	return cmd
+}
+
+func offerUpdate(ctx context.Context, updates updateManager, current string, in io.Reader, out, errOut io.Writer) (bool, error) {
+	result, err := updates.Check(ctx, current, false)
+	if err != nil || !result.UpdateAvailable {
+		return false, nil
+	}
+	fmt.Fprintf(out, "\nUpdate available! %s -> %s\n", result.Current, result.Latest)
+	if result.ReleaseURL != "" {
+		fmt.Fprintf(out, "Release notes: %s\n", result.ReleaseURL)
+	}
+	fmt.Fprintln(out, "\n1. Update now")
+	fmt.Fprintln(out, "2. Later")
+	fmt.Fprintln(out, "3. Skip this version")
+	fmt.Fprint(out, "\nChoose [2]: ")
+	choice, readErr := bufio.NewReader(in).ReadString('\n')
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
+		return false, nil
+	}
+	// Enter (empty) defaults to Later so a reflexive keypress on the way into the
+	// explorer never kicks off a self-update; only an explicit "1" updates.
+	switch strings.TrimSpace(choice) {
+	case "1":
+		method := updates.DetectMethod()
+		fmt.Fprintf(out, "Updating with %s...\n", method)
+		background, err := updates.Upgrade(ctx, method, result.Latest, out, errOut)
+		if err != nil {
+			return true, err
+		}
+		if background {
+			fmt.Fprintln(out, "The update will finish after this process exits.")
+		} else {
+			fmt.Fprintf(out, "Etherscan CLI %s installed. Restart the CLI to use it.\n", result.Latest)
+		}
+		return true, nil
+	case "3":
+		if err := updates.Skip(result.Latest); err != nil {
+			return false, nil
+		}
+		fmt.Fprintf(out, "Skipped Etherscan CLI %s. You will be notified about the next release.\n\n", result.Latest)
+		return false, nil
+	default:
+		fmt.Fprintln(out)
+		return false, nil
+	}
+}
+
+func tuiCommand(state *globalState, info BuildInfo, updates updateManager) *cobra.Command {
 	return &cobra.Command{
 		Use:   "tui",
 		Short: "Launch the interactive explorer",
@@ -524,6 +630,10 @@ func tuiCommand(state *globalState, info BuildInfo) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !interactiveTTY() {
 				return errors.New("tui requires an interactive terminal")
+			}
+			exit, err := offerUpdate(cmd.Context(), updates, info.Version, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+			if err != nil || exit {
+				return err
 			}
 			return launchTUI(cmd.Context(), state, info)
 		},
@@ -538,26 +648,22 @@ func interactiveTTY() bool {
 }
 
 // launchTUI resolves the runtime once and hands the interactive explorer the
-// endpoint list plus an executor that reuses the existing client/call path. With
-// no key resolved it runs the first-launch setup screen first; a key saved there
-// lands in the config file, so the runtime resolution below picks it up.
+// endpoint list plus an executor that reuses the existing client/call path. An
+// empty key is allowed here so first-time users can explore locally; the TUI asks
+// for and validates a key only when an API-backed endpoint is submitted.
 func launchTUI(ctx context.Context, state *globalState, info BuildInfo) error {
 	cfg, _, err := config.Load()
 	if err != nil {
 		return err
 	}
-	if resolveKey(state, cfg) == "" {
-		if err := runSetup(ctx, state); err != nil {
-			return err
-		}
-		cfg, _, _ = config.Load()
-	}
-	rt, err := runtime(state)
+	key := resolveKey(state, cfg)
+	rt, err := buildRuntime(state, cfg, key)
 	if err != nil {
 		return err
 	}
+	baseURL := firstNonEmpty(state.baseURL, os.Getenv("ETHERSCAN_BASE_URL"), cfg.BaseURL, client.DefaultBaseURL)
 	keyLabel := "none"
-	if key := resolveKey(state, cfg); key != "" {
+	if key != "" {
 		keyLabel = maskKey(key)
 	}
 	eps, index := tuiEndpoints()
@@ -570,6 +676,30 @@ func launchTUI(ctx context.Context, state *globalState, info BuildInfo) error {
 		}
 		return chain.DisplayName, chain.ID, nil
 	}
+	saveKey := func(ctx context.Context, key string) (string, error) {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			return "", errors.New("empty API key")
+		}
+		if err := checkKeyShape(key); err != nil {
+			return "", err
+		}
+		if err := validateKeyLive(ctx, state, key, rt.chain.ID, baseURL); err != nil {
+			return "", err
+		}
+		latest, _, err := config.Load()
+		if err != nil {
+			return "", err
+		}
+		latest.BaseURL = baseURL
+		latest.DefaultChain = rt.chain.Name
+		config.StoreAPIKey(key, &latest)
+		if _, err := config.Save(latest); err != nil {
+			return "", err
+		}
+		rt.client = rt.client.WithAPIKey(key)
+		return maskKey(key), nil
+	}
 	return tui.Run(ctx, tui.Config{
 		Endpoints:   eps,
 		Exec:        tuiExec(&rt, index),
@@ -577,6 +707,8 @@ func launchTUI(ctx context.Context, state *globalState, info BuildInfo) error {
 		ChainName:   rt.chain.DisplayName,
 		ChainID:     rt.chain.ID,
 		KeyLabel:    keyLabel,
+		HasAPIKey:   key != "",
+		SaveAPIKey:  saveKey,
 		Chains:      tuiChains(),
 		SwitchChain: switchChain,
 	})
@@ -593,45 +725,6 @@ func tuiChains() []tui.ChainInfo {
 		})
 	}
 	return out
-}
-
-// runSetup runs the TUI first-launch key screen. Its Save closure applies the
-// same shape check, live validation, and persistence as `etherscan login`, so a
-// key accepted here behaves identically to one saved via login.
-func runSetup(ctx context.Context, state *globalState) error {
-	save := func(ctx context.Context, key string) error {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			return errors.New("empty API key")
-		}
-		if err := checkKeyShape(key); err != nil {
-			return err
-		}
-		cfg, _, err := config.Load()
-		if err != nil {
-			return err
-		}
-		chain, err := chains.Resolve(firstNonEmpty(state.chain, cfg.DefaultChain, "ethereum"))
-		if err != nil {
-			return err
-		}
-		baseURL := firstNonEmpty(state.baseURL, cfg.BaseURL, client.DefaultBaseURL)
-		if err := validateKeyLive(ctx, state, key, chain.ID, baseURL); err != nil {
-			return err
-		}
-		cfg.BaseURL = baseURL
-		cfg.DefaultChain = chain.Name
-		config.StoreAPIKey(key, &cfg)
-		_, err = config.Save(cfg)
-		return err
-	}
-	if err := tui.RunSetup(ctx, tui.SetupConfig{Save: save}); err != nil {
-		if errors.Is(err, tui.ErrSetupAborted) {
-			return errNoAPIKey
-		}
-		return err
-	}
-	return nil
 }
 
 // tuiValidate builds the pre-call guard shared by the TUI form (inline errors on

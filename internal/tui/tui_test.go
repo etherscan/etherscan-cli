@@ -64,6 +64,133 @@ func TestBrowseNoParamEndpointFetches(t *testing.T) {
 	}
 }
 
+func TestAPIBackedEndpointPromptsForKeyAndResumes(t *testing.T) {
+	called := false
+	cfg := Config{
+		Endpoints: []Endpoint{{Module: "stats", Action: "ethprice", Title: "ethprice"}},
+		Exec: func(ctx context.Context, module, action string, params map[string]string) (json.RawMessage, error) {
+			called = true
+			return json.RawMessage(`{"ethusd":"1000"}`), nil
+		},
+		ChainName: "ethereum",
+		ChainID:   "1",
+		KeyLabel:  "none",
+		SaveAPIKey: func(ctx context.Context, key string) (string, error) {
+			if key != "TESTKEY" {
+				t.Fatalf("unexpected key: %q", key)
+			}
+			return "TEST…TKEY", nil
+		},
+	}
+	m := newModel(context.Background(), cfg)
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.focus = focusEndpoints
+
+	if _, cmd := m.openSelected(); cmd == nil {
+		t.Fatal("expected key-input command")
+	}
+	if m.state != stateAPIKey || called {
+		t.Fatalf("expected key setup without an API call, state=%v called=%v", m.state, called)
+	}
+	if !strings.Contains(m.View(), "keep exploring") {
+		t.Fatalf("setup view does not explain cancellation:\n%s", m.View())
+	}
+
+	m.keyInput.SetValue("TESTKEY")
+	if _, cmd := m.keyAPIKey(tea.KeyMsg{Type: tea.KeyEnter}); cmd == nil || !m.keySaving {
+		t.Fatal("enter should begin asynchronous key validation")
+	}
+	label, err := m.cfg.SaveAPIKey(context.Background(), "TESTKEY")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, cmd := m.Update(apiKeySavedMsg{label: label})
+	if !m.cfg.HasAPIKey || m.cfg.KeyLabel != "TEST…TKEY" {
+		t.Fatalf("saved key state not reflected: has=%v label=%q", m.cfg.HasAPIKey, m.cfg.KeyLabel)
+	}
+	if m.state != stateFetching || cmd == nil {
+		t.Fatalf("pending request did not resume: state=%v cmd=%v", m.state, cmd)
+	}
+	m.fetchCmd()()
+	if !called {
+		t.Fatal("resumed request did not call executor")
+	}
+}
+
+func TestAPIKeyPromptCancelReturnsToExistingForm(t *testing.T) {
+	cfg := Config{
+		Endpoints: []Endpoint{{
+			Module: "account", Action: "balance", Title: "balance",
+			Params: []Param{{Name: "address", Label: "address", Required: true}},
+		}},
+		Exec:       func(context.Context, string, string, map[string]string) (json.RawMessage, error) { return nil, nil },
+		ChainName:  "ethereum",
+		ChainID:    "1",
+		KeyLabel:   "none",
+		SaveAPIKey: func(context.Context, string) (string, error) { return "", nil },
+	}
+	m := newModel(context.Background(), cfg)
+	m.focus = focusEndpoints
+	m.openSelected()
+	m.inputs[0].SetValue("0x80f3950a4d371c43360f292a4170624abd9eed03")
+	m.submitForm()
+	if m.state != stateAPIKey || m.keyReturn != stateForm {
+		t.Fatalf("expected key prompt returning to form, state=%v return=%v", m.state, m.keyReturn)
+	}
+	m.keyInput.SetValue("sensitive")
+	m.keyAPIKey(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.state != stateForm {
+		t.Fatalf("cancel should return to form, got %v", m.state)
+	}
+	if got := m.inputs[0].Value(); !strings.HasPrefix(got, "0x80f3") {
+		t.Fatalf("form input was not preserved: %q", got)
+	}
+	if m.keyInput.Value() != "" {
+		t.Fatal("cancel should clear key input")
+	}
+}
+
+func TestBareEndpointRunsWithoutAPIKey(t *testing.T) {
+	called := false
+	cfg := Config{
+		Endpoints: []Endpoint{{Module: "getapilimit", Action: "chainlist", Title: "chainlist", Bare: true}},
+		Exec: func(context.Context, string, string, map[string]string) (json.RawMessage, error) {
+			called = true
+			return json.RawMessage(`[]`), nil
+		},
+		ChainName:  "ethereum",
+		ChainID:    "1",
+		KeyLabel:   "none",
+		SaveAPIKey: func(context.Context, string) (string, error) { return "", nil },
+	}
+	m := newModel(context.Background(), cfg)
+	m.focus = focusEndpoints
+	if _, cmd := m.openSelected(); cmd == nil || m.state != stateFetching {
+		t.Fatalf("bare endpoint should fetch directly, state=%v cmd=%v", m.state, cmd)
+	}
+	m.fetchCmd()()
+	if !called {
+		t.Fatal("bare endpoint did not call executor")
+	}
+}
+
+func TestAPIKeyValidationErrorStaysInPrompt(t *testing.T) {
+	cfg := Config{
+		Endpoints:  []Endpoint{{Module: "stats", Action: "ethprice", Title: "ethprice"}},
+		ChainName:  "ethereum",
+		ChainID:    "1",
+		KeyLabel:   "none",
+		SaveAPIKey: func(context.Context, string) (string, error) { return "", errString("invalid API key") },
+	}
+	m := newModel(context.Background(), cfg)
+	m.focus = focusEndpoints
+	m.openSelected()
+	m.Update(apiKeySavedMsg{err: errString("invalid API key")})
+	if m.state != stateAPIKey || m.keySaving || !strings.Contains(m.keyErr, "invalid API key") {
+		t.Fatalf("validation error not retained in setup: state=%v saving=%v err=%q", m.state, m.keySaving, m.keyErr)
+	}
+}
+
 // TestGroupLabelDrivesSidebar: endpoints sharing a Group land in one sidebar
 // group under the group label, while the exec call and result header keep the
 // wire module.
@@ -480,13 +607,15 @@ func TestViewsDoNotPanic(t *testing.T) {
 	m := testModel(func(ctx context.Context, module, action string, params map[string]string) (json.RawMessage, error) {
 		return json.RawMessage(`[]`), nil
 	})
-	for _, st := range []viewState{stateBrowse, stateForm, stateFetching, stateResult} {
+	for _, st := range []viewState{stateBrowse, stateForm, stateFetching, stateResult, stateAPIKey} {
 		m.state = st
 		if st == stateForm {
 			m.modIdx = 0
 			m.focus = focusEndpoints
 			m.epIdx = 0
 			m.openSelected()
+		} else if st == stateAPIKey {
+			m.openAPIKey()
 		}
 		_ = m.View()
 	}

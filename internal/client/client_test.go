@@ -154,6 +154,27 @@ func TestClientForChainPreservesSession(t *testing.T) {
 	}
 }
 
+func TestWithAPIKeyClonesWithoutMutatingOriginal(t *testing.T) {
+	var queries []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		queries = append(queries, r.URL.RawQuery)
+		fmt.Fprint(w, `{"status":"1","message":"OK","result":"1"}`)
+	}))
+	defer srv.Close()
+
+	original := New(Options{BaseURL: srv.URL, ChainID: "1", RateLimit: 1000})
+	withKey := original.WithAPIKey("TESTKEY")
+	if _, err := original.Get(context.Background(), "account", "balance", nil, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := withKey.Get(context.Background(), "account", "balance", nil, false); err != nil {
+		t.Fatal(err)
+	}
+	if len(queries) != 2 || strings.Contains(queries[0], "apikey=") || !strings.Contains(queries[1], "apikey=TESTKEY") {
+		t.Fatalf("unexpected original/clone queries: %v", queries)
+	}
+}
+
 func TestChainList(t *testing.T) {
 	var gotPath, gotQuery string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

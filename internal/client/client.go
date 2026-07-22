@@ -112,6 +112,14 @@ func (c *Client) ForChain(chainID string) *Client {
 	return &clone
 }
 
+// WithAPIKey returns a client using apiKey while preserving the existing
+// transport, rate limiter, chain, and diagnostic settings.
+func (c *Client) WithAPIKey(apiKey string) *Client {
+	clone := *c
+	clone.apiKey = apiKey
+	return &clone
+}
+
 func (c *Client) Get(ctx context.Context, module, action string, params map[string]string, retryable bool) (Result, error) {
 	values := url.Values{}
 	values.Set("module", module)
