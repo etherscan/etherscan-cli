@@ -52,5 +52,5 @@ jobs:
           version: v2.17.0
           install-only: true
 
-      - name: Validate GoReleaser configuration
-        run: goreleaser check
+      - name: Validate snapshot release
+        run: goreleaser release --snapshot --clean --skip=publish

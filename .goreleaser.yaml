@@ -40,6 +40,7 @@ archives:
           - zip
     files:
       - README.md
+      - LICENSE
 
 checksum:
   name_template: checksums.txt
@@ -52,3 +53,21 @@ changelog:
 
 release:
   prerelease: auto
+
+brews:
+  - name: etherscan
+    ids:
+      - etherscan
+    repository:
+      owner: etherscan
+      name: homebrew-etherscan-cli
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/etherscan/etherscan-cli"
+    description: "Command-line client and interactive explorer for the Etherscan V2 API"
+    license: MIT
+    install: |
+      bin.install "etherscan"
+    test: |
+      system "#{bin}/etherscan", "version"
+    skip_upload: '{{ if index .Env "HOMEBREW_TAP_TOKEN" }}auto{{ else }}true{{ end }}'

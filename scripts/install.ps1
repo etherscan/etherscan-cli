@@ -2,7 +2,9 @@
 param(
     [string]$Version = $env:ETHERSCAN_VERSION,
     [string]$InstallDir = $env:ETHERSCAN_INSTALL_DIR,
-    [switch]$NoPathUpdate
+    [switch]$NoPathUpdate,
+    [int]$WaitForProcessId = 0,
+    [switch]$CleanupScript
 )
 
 $ErrorActionPreference = "Stop"
@@ -138,6 +140,9 @@ if ($InstallDir.Contains(';')) {
 if ($InstallDir.IndexOfAny([char[]]"`r`n") -ge 0) {
     throw "The installation directory cannot contain a line break."
 }
+if ($WaitForProcessId -gt 0) {
+    Wait-Process -Id $WaitForProcessId -ErrorAction SilentlyContinue
+}
 
 $resolved = Resolve-EtherscanVersion -RequestedVersion $Version
 $architecture = Get-EtherscanArchitecture
@@ -233,4 +238,7 @@ try {
 }
 finally {
     Remove-Item -LiteralPath $tempDirectory -Recurse -Force -ErrorAction SilentlyContinue
+    if ($CleanupScript -and -not [string]::IsNullOrWhiteSpace($PSCommandPath)) {
+        Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+    }
 }

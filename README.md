@@ -6,13 +6,26 @@ Etherscan's API documentation remains as the main reference for endpoint paramet
 
 ## Installation
 
+### Homebrew (macOS and Linux)
+
+```sh
+brew install etherscan/etherscan-cli/etherscan
+```
+
+Or tap first, then install:
+
+```sh
+brew tap etherscan/etherscan-cli
+brew install etherscan
+```
+
 ### Windows
 
 ```powershell
 irm https://raw.githubusercontent.com/etherscan/etherscan-cli/master/scripts/install.ps1 | iex
 ```
 
-### macOS and Linux
+### Installation script (macOS and Linux)
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/etherscan/etherscan-cli/master/scripts/install.sh | sh
@@ -25,6 +38,14 @@ The installers select the correct binary, verify its checksum, and add `ethersca
 Download the appropriate archive and `checksums.txt` from [GitHub Releases](https://github.com/etherscan/etherscan-cli/releases). Verify the checksum, extract the archive, and place `etherscan` on your `PATH`.
 
 If installation fails, [open a GitHub issue](https://github.com/etherscan/etherscan-cli/issues/new).
+
+### Updating
+
+Update to the latest stable release with:
+
+```sh
+etherscan update
+```
 
 ## Quickstart
 
@@ -93,6 +114,7 @@ If `--all` reaches `--max-pages`, the result may be truncated.
 | `etherscan login` | Validate and store an API key |
 | `etherscan logout` | Remove the stored API key |
 | `etherscan uninstall` | Remove all CLI configuration |
+| `etherscan update` | Update to the latest stable release |
 | `etherscan whoami` | Show the active chain and saved API key |
 | `etherscan config` | Get, list, or set CLI configuration |
 | `etherscan chains list` | List chains built into this CLI release |
@@ -235,3 +257,7 @@ If `--all` reaches `--max-pages`, the result may be truncated.
 | --- | --- |
 | `etherscan apilimit` | [getapilimit](https://docs.etherscan.io/api-reference/endpoint/getapilimit.md) |
 <!-- END GENERATED COMMAND INDEX -->
+
+## License
+
+[MIT](LICENSE)
