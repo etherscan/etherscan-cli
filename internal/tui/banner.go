@@ -4,26 +4,14 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/etherscan/etherscan-cli/internal/brand"
 )
 
-// bannerLogo is traced from IMG_9903.png's actual 88x20 pixel grid. Each source
-// pixel was majority-sampled from the mockup's 12px by ~11.4px cells, then pairs
-// of rows were collapsed into half-block terminal cells. Rows are left-aligned;
-// ragged right edges are harmless because logoSt sets only the foreground colour.
-var bannerLogo = []string{
-	"     ▄▄██████▄▄",
-	"  ▄██████████████▄",
-	" ▄███████████▀▀▀██▄      ▄▄▄▄▄  ▄   ▄▄",
-	"▄████████▀▀▀█   ███▄    ██▀▀▀  ██▄▄ ██ ▄▄▄    ▄▄▄    ▄ ▄▄ ▄▄▄▄    ▄▄▄     ▄▄▄ ▄  ▄▄ ▄▄▄",
-	"████▀▀▀██   █   ██▀     ██▄▄▄  ██▀  ██▀ ▀█▄ ▄█▀ ▀██ ██▀▀ ▄█  ▀█ ▄█▀▀▀██ ▄█▀▀▀▀█  ██▀ ▀██",
-	"████   ██   █   ▀ ▄█    ██     ██   ██   ██ ██▀▀▀▀▀ ██    ▀▀▀▄▄ ██      ██    █  ██   ██",
-	"▀███   ██   ▀   ▄██▀    ██▄▄▄▄ ▀█▄▄ ██   ██ ▀█▄▄▄█▀ ██   ▀█▄▄▄█ ▀█▄▄▄█▀ ▀█▄▄▄██  ██   ██",
-	" ▀█▀   ▀    ▄▄████▀",
-	"      ▄▄▄▄███████▀",
-	"     ▀▀██████▀▀",
-}
+// bannerLogo / bannerTagline alias the shared brand assets so the TUI landing
+// wordmark and the plain-CLI Quick Start banner stay identical from one source.
+var bannerLogo = brand.Logo
 
-const bannerTagline = "Etherscan API V2 · https://docs.etherscan.io"
+const bannerTagline = brand.Tagline
 
 // bannerHeight / bannerWidth describe the block art; used by the size guard below
 // and by tests.

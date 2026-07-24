@@ -1,5 +1,5 @@
 // Package tui implements the interactive, full-screen Etherscan explorer that is
-// launched on a bare `etherscan` invocation at an interactive terminal. It is a
+// launched by the `etherscan tui` command at an interactive terminal. It is a
 // read-only browser over the endpoint registry: pick a module, pick an endpoint,
 // fill any required parameters, and view the result. It never handles write or
 // sensitive actions (those stay CLI-only) and is fully decoupled from the cli
@@ -20,6 +20,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/etherscan/etherscan-cli/internal/brand"
 	"github.com/etherscan/etherscan-cli/internal/output"
 )
 
@@ -134,8 +135,8 @@ type apiKeySavedMsg struct {
 }
 
 var (
-	accent   = lipgloss.Color("#5A8DEE")
-	dim      = lipgloss.Color("#8A8A8A")
+	accent   = lipgloss.Color(brand.AccentHex)
+	dim      = lipgloss.Color(brand.DimHex)
 	errColor = lipgloss.Color("#E06C75")
 	titleSt  = lipgloss.NewStyle().Bold(true).Foreground(accent)
 	logoSt   = lipgloss.NewStyle().Bold(true).Foreground(accent)
@@ -148,7 +149,7 @@ var (
 	descSt   = lipgloss.NewStyle().Foreground(dim)
 	errSt    = lipgloss.NewStyle().Foreground(errColor)
 	labelSt  = lipgloss.NewStyle().Foreground(accent)
-	keyOnSt  = lipgloss.NewStyle().Foreground(lipgloss.Color("#98C379"))
+	keyOnSt  = lipgloss.NewStyle().Foreground(lipgloss.Color(brand.GreenHex))
 	keyOffSt = lipgloss.NewStyle().Foreground(errColor)
 )
 
@@ -708,7 +709,7 @@ func (m model) viewAPIKey() string {
 	var b strings.Builder
 	b.WriteString(headSt.Render("Connect your API key") + "\n")
 	b.WriteString(subSt.Render("An API key is needed to run this endpoint. You can keep exploring without one.") + "\n")
-	b.WriteString(subSt.Render("Get a free key at https://etherscan.io/apis") + "\n\n")
+	b.WriteString(subSt.Render("Get a free key at https://etherscan.io/api/pricing") + "\n\n")
 	if m.keySaving {
 		b.WriteString(m.spin.View() + " validating key…\n")
 	} else {

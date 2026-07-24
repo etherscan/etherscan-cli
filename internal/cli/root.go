@@ -68,16 +68,9 @@ func newRootCommand(info BuildInfo, updates updateManager) *cobra.Command {
 		SilenceErrors: true,
 		Args:          cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// A bare invocation at an interactive terminal opens the explorer; when
-			// piped/redirected (agents, scripts, CI) it prints a plain text splash so
-			// nothing hangs waiting for keypresses.
-			if interactiveTTY() {
-				exit, err := offerUpdate(cmd.Context(), updates, info.Version, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
-				if err != nil || exit {
-					return err
-				}
-				return launchTUI(cmd.Context(), state, info)
-			}
+			// A bare invocation prints the Quick Start guide (coloured at a terminal,
+			// plain when piped). The interactive explorer is launched explicitly with
+			// `etherscan tui`; `etherscan --help` lists every command.
 			printSplash(cmd.OutOrStdout(), info)
 			return nil
 		},
@@ -908,20 +901,28 @@ func tuiEndpoints() ([]tui.Endpoint, map[string]EndpointSpec) {
 	return list, index
 }
 
-// printSplash is shown on a bare `etherscan` invocation: a short branded banner
-// with a few example commands and a pointer to full help, instead of dumping the
-// entire auto-generated command tree.
+// printSplash is shown on a bare `etherscan` invocation: the branded Quick Start
+// guide instead of dumping the entire auto-generated command tree. It is coloured
+// when stdout is a real terminal and plain when piped (CI, agents), so redirected
+// output stays free of escape codes.
 func printSplash(w io.Writer, info BuildInfo) {
-	fmt.Fprintf(w, "Etherscan CLI %s\n", info.Version)
-	fmt.Fprintln(w, "Command-line client for the Etherscan V2 API.")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Examples:")
-	fmt.Fprintln(w, "  etherscan login")
-	fmt.Fprintln(w, "  etherscan account balance 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045")
-	fmt.Fprintln(w, "  etherscan gastracker oracle")
-	fmt.Fprintln(w, "  etherscan --chain base account balance 0xADDRESS --json")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Run 'etherscan --help' to see all commands.")
+	fmt.Fprintln(w, renderQuickStart(info, stdoutIsTTY(), stdoutWidth()))
+}
+
+// stdoutIsTTY reports whether standard output is an interactive terminal, used to
+// decide whether the Quick Start banner should be coloured.
+func stdoutIsTTY() bool {
+	return term.IsTerminal(int(os.Stdout.Fd()))
+}
+
+// stdoutWidth returns the terminal width of standard output, or 0 when it is not
+// a terminal or the size cannot be determined.
+func stdoutWidth() int {
+	w, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		return 0
+	}
+	return w
 }
 
 // checkKeyShape fast-fails a key containing whitespace (a clear paste mistake) before

@@ -118,13 +118,13 @@ etherscan account balance 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
 
 ### Explore interactively
 
-Run the CLI without a command to open the full-screen endpoint explorer:
+Run `etherscan tui` to open the full-screen endpoint explorer:
 
 ```sh
-etherscan
+etherscan tui
 ```
 
-Use `etherscan tui` to launch it explicitly. The explorer can be opened before authentication and asks you to validate and save a key when you submit an API-backed endpoint.
+The explorer can be opened before authentication and asks you to validate and save a key when you submit an API-backed endpoint. Running `etherscan` with no command prints the Quick Start guide.
 
 ## Practical workflows
 
@@ -202,8 +202,8 @@ etherscan contract verify --help
 
 | Command | Description |
 | --- | --- |
-| `etherscan` | Launch the interactive explorer in a terminal |
-| `etherscan tui` | Explicitly launch the interactive explorer |
+| `etherscan` | Show the Quick Start guide |
+| `etherscan tui` | Launch the interactive explorer |
 | `etherscan login` | Validate and store an API key |
 | `etherscan logout` | Remove the stored API key |
 | `etherscan uninstall` | Remove all CLI configuration |
