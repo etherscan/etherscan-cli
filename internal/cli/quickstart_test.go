@@ -85,15 +85,43 @@ func TestRenderQuickStartNarrowFallback(t *testing.T) {
 	}
 }
 
-// The banner must not overflow an ordinary terminal, or the wordmark and title
-// scroll away before the user can read them. 24 rows is the conventional floor;
-// below that the smallest form still exceeds the viewport and simply scrolls,
-// which TestQuickStartDegradesMonotonically covers instead.
+func TestRenderQuickStartRetainsLogoAtEveryHeight(t *testing.T) {
+	firstLogoRow := brand.Logo[0]
+	for _, height := range []int{10, 24, 30, 40, 60} {
+		out := renderQuickStart(BuildInfo{Version: "1.2.3"}, false, 100, height)
+		if !strings.HasPrefix(out, firstLogoRow+"\n") {
+			t.Errorf("height %d replaced the full logo; first line = %q", height, strings.Split(out, "\n")[0])
+		}
+	}
+}
+
+func TestRenderSplashInteractiveSpacing(t *testing.T) {
+	interactive := renderSplash(BuildInfo{}, true, 100, 40)
+	if !strings.HasPrefix(interactive, "\n"+ansiColor(brand.AccentHex, brand.Logo[0], true)) {
+		t.Errorf("interactive splash must start with one blank row before the logo, got %q", interactive[:min(len(interactive), 80)])
+	}
+	if strings.HasPrefix(interactive, "\n\n") {
+		t.Fatal("interactive splash started with more than one blank row")
+	}
+
+	plain := renderSplash(BuildInfo{}, false, 100, 40)
+	if strings.HasPrefix(plain, "\n") {
+		t.Fatal("plain splash must not gain a leading blank row")
+	}
+	if strings.Contains(plain, "\x1b[") {
+		t.Fatal("plain splash must not contain ANSI escapes")
+	}
+}
+
+// When the terminal is too narrow for the full wordmark, the compact banner must
+// not overflow an ordinary terminal. 24 rows is the conventional floor; below
+// that the smallest form still exceeds the viewport and simply scrolls, which
+// TestQuickStartDegradesMonotonically covers instead.
 //
-// Height only. Narrow widths are deliberately not exercised here — see
-// TestQuickStartBoxAligned for why.
+// Width 80 deliberately selects the one-line logo while leaving enough room for
+// every Quick Start row; narrower box behavior is covered separately.
 func TestQuickStartFitsTerminalHeight(t *testing.T) {
-	for _, tc := range []struct{ w, h int }{{100, 24}, {100, 30}, {100, 40}, {100, 60}} {
+	for _, tc := range []struct{ w, h int }{{80, 24}, {80, 30}, {80, 40}, {80, 60}} {
 		out := renderQuickStart(BuildInfo{Version: "1.2.3"}, false, tc.w, tc.h)
 		// +1 for the line the shell prompt returns on below the banner.
 		if got := len(strings.Split(out, "\n")) + 1; got > tc.h {

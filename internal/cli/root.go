@@ -941,7 +941,18 @@ func tuiEndpoints() ([]tui.Endpoint, map[string]EndpointSpec) {
 // output stays free of escape codes.
 func printSplash(w io.Writer, info BuildInfo) {
 	width, height := stdoutSize()
-	fmt.Fprintln(w, renderQuickStart(info, stdoutIsTTY(), width, height))
+	fmt.Fprintln(w, renderSplash(info, stdoutIsTTY(), width, height))
+}
+
+// renderSplash adds a single breathing row before the artwork at an interactive
+// terminal. Redirected output stays byte-compatible with the existing plain
+// Quick Start render and does not gain a leading blank line.
+func renderSplash(info BuildInfo, interactive bool, width, height int) string {
+	splash := renderQuickStart(info, interactive, width, height)
+	if interactive {
+		return "\n" + splash
+	}
+	return splash
 }
 
 // stdoutIsTTY reports whether standard output is an interactive terminal, used to

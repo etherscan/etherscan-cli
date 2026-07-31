@@ -61,13 +61,13 @@ const (
 //
 // width and height are the terminal size (<=0 means unknown, i.e. piped, in
 // which case the full render is used so redirected output captures everything).
-// The banner degrades in three steps to fit a short terminal: the wordmark
-// collapses to a one-line "Etherscan", then the box's blank padding rows are
-// dropped, then the group labels go. The airy box survives longer than the block
-// art because the box is the part carrying information. Narrow terminals degrade
-// on a separate axis: the "# comment" column goes first, and only below about 38
-// columns — narrower than the shortest command row itself — are rows ellipsised
-// to keep them inside the border.
+// The full wordmark is retained whenever it fits the terminal width, even when
+// the resulting banner needs a little vertical scrolling. A terminal narrower
+// than the wordmark uses the one-line "Etherscan" fallback, then drops the box's
+// blank padding rows and group labels as needed to fit its height. Narrow
+// terminals degrade on a separate axis: the "# comment" column goes first, and
+// only below about 38 columns — narrower than the shortest command row itself —
+// are rows ellipsised to keep them inside the border.
 func renderQuickStart(info BuildInfo, color bool, width, height int) string {
 	paint := func(hex, s string, bold bool) string {
 		if !color {
@@ -175,7 +175,7 @@ func renderQuickStart(info BuildInfo, color bool, width, height int) string {
 
 	fullLogo := width <= 0 || width >= logoWidth
 	padRows, grouped := true, true
-	if height > 0 {
+	if height > 0 && !fullLogo {
 		// Rows consumed: wordmark + the blank line under it + 2 box borders + the
 		// content. Two more are reserved for the invoking command line above and
 		// the shell prompt that returns below, so the top of the banner is not
@@ -184,17 +184,15 @@ func renderQuickStart(info BuildInfo, color bool, width, height int) string {
 			return logoRows+1+2+len(build(pad, grouped, commented))+2 <= height
 		}
 		switch {
-		case fullLogo && fits(len(brand.Logo), true, true):
-			// Everything fits.
 		case fits(1, true, true):
-			fullLogo = false
+			// Everything fits with the one-line fallback.
 		case fits(1, false, true):
-			fullLogo, padRows = false, false
+			padRows = false
 		default:
 			// Smallest form; a terminal shorter than this simply scrolls. Height
 			// degradation only ever drops decoration, never content — narrowing
 			// is the axis that can reach the commands.
-			fullLogo, padRows, grouped = false, false, false
+			padRows, grouped = false, false
 		}
 	}
 	lines := build(padRows, grouped, commented)
