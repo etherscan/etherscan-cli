@@ -36,9 +36,7 @@ type globalState struct {
 	chain    string
 	baseURL  string
 	out      string
-	json     bool
 	compact  bool
-	csv      bool
 	timeout  time.Duration
 	rate     float64
 	verbose  bool
@@ -48,6 +46,11 @@ type globalState struct {
 	maxPages int
 	all      bool
 }
+
+// removedOutputFlags maps flags dropped in favour of -o/--output to their replacement. Without
+// this, a script still passing --json gets cobra's bare "unknown flag" and has to go read --help
+// to find out what replaced it.
+var removedOutputFlags = map[string]string{"--json": "-o json", "--csv": "-o csv"}
 
 type updateManager interface {
 	Check(context.Context, string, bool) (updater.Result, error)
@@ -80,10 +83,8 @@ func newRootCommand(info BuildInfo, updates updateManager) *cobra.Command {
 	root.PersistentFlags().StringVar(&state.apiKey, "apikey", "", "alias for --api-key")
 	root.PersistentFlags().StringVar(&state.chain, "chain", "", "chain name or chainid")
 	root.PersistentFlags().StringVar(&state.baseURL, "base-url", "", "API base URL")
-	root.PersistentFlags().StringVarP(&state.out, "output", "o", "", "output format: table, json, csv")
-	root.PersistentFlags().BoolVar(&state.json, "json", false, "print raw result as JSON")
+	root.PersistentFlags().StringVarP(&state.out, "output", "o", "", "output format: json (default), table, csv")
 	root.PersistentFlags().BoolVar(&state.compact, "compact", false, "compact JSON output")
-	root.PersistentFlags().BoolVar(&state.csv, "csv", false, "print result as CSV")
 	root.PersistentFlags().DurationVar(&state.timeout, "timeout", 30*time.Second, "request timeout")
 	root.PersistentFlags().Float64Var(&state.rate, "rate-limit", 3, "client-side request rate limit per second (free-tier API V2 default; raise for higher tiers)")
 	root.PersistentFlags().BoolVarP(&state.verbose, "verbose", "v", false, "log request URL and timing to stderr")
@@ -92,6 +93,16 @@ func newRootCommand(info BuildInfo, updates updateManager) *cobra.Command {
 	root.PersistentFlags().BoolVar(&state.all, "all", false, "auto-paginate list commands")
 	root.PersistentFlags().IntVar(&state.maxPages, "max-pages", 20, "maximum pages for --all")
 	hideFlags(root, "apikey", "base-url", "compact", "max-pages", "rate-limit", "timeout", "verbose", "debug", "yes")
+	// Registered on root only: cobra's FlagErrorFunc walks up to the parent when a subcommand
+	// has none, so this covers every command in the tree.
+	root.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+		for flag, replacement := range removedOutputFlags {
+			if err.Error() == "unknown flag: "+flag {
+				return fmt.Errorf("%s was removed; use %s instead", flag, replacement)
+			}
+		}
+		return err
+	})
 
 	root.AddCommand(loginCommand(state), logoutCommand(state), uninstallCommand(state), configCommand(state), chainsCommand(state), whoamiCommand(state), versionCommand(info), updateCommand(info, updates), tuiCommand(state, info, updates), completionCommand(root))
 	addEndpointCommands(root, state)
@@ -241,7 +252,10 @@ func buildRuntime(state *globalState, cfg config.File, key string) (resolvedRunt
 	if !strings.HasPrefix(baseURL, "https://") {
 		fmt.Fprintf(os.Stderr, "warning: non-HTTPS base URL: %s\n", baseURL)
 	}
-	format := output.Format(firstNonEmpty(outputFlag(state), cfg.DefaultOutput, string(output.DefaultFormat)))
+	format, err := output.ParseFormat(firstNonEmpty(state.out, cfg.DefaultOutput, string(output.DefaultFormat)))
+	if err != nil {
+		return resolvedRuntime{}, err
+	}
 	return resolvedRuntime{
 		client: client.New(client.Options{BaseURL: baseURL, APIKey: key, ChainID: chain.ID, Timeout: state.timeout, RateLimit: state.rate, Verbose: state.verbose, Debug: state.debug, Stderr: os.Stderr}),
 		format: format,
@@ -515,6 +529,10 @@ func configCommand(state *globalState) *cobra.Command {
 
 func chainsCommand(state *globalState) *cobra.Command {
 	return &cobra.Command{Use: "chains", Short: "List supported chains", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+		format, err := chainsFormat(state)
+		if err != nil {
+			return err
+		}
 		rows := make([]map[string]string, 0, len(chains.All()))
 		for _, c := range chains.All() {
 			freeTier := "available"
@@ -531,7 +549,7 @@ func chainsCommand(state *globalState) *cobra.Command {
 				"explorer":  c.Explorer,
 			})
 		}
-		return output.WriteRows(os.Stdout, rows, chainsFormat(state), []string{"id", "name", "slug", "free_tier", "testnet", "symbol", "explorer"})
+		return output.WriteRows(os.Stdout, rows, format, []string{"id", "name", "slug", "free_tier", "testnet", "symbol", "explorer"})
 	}}
 }
 
@@ -1252,23 +1270,13 @@ func confirm(ctx context.Context, prompt string) error {
 	}
 }
 
-func outputFlag(state *globalState) string {
-	if state.json {
-		return string(output.JSON)
-	}
-	if state.csv {
-		return string(output.CSV)
-	}
-	return state.out
-}
-
 // chainsFormat resolves the output format for `chains` without going through
 // runtime(): the chain list comes from the built-in registry, so the command must
 // work before `etherscan login`. A config load failure degrades to the flag value
 // or the built-in default rather than failing the listing.
-func chainsFormat(state *globalState) output.Format {
+func chainsFormat(state *globalState) (output.Format, error) {
 	cfg, _, _ := config.Load()
-	return output.Format(firstNonEmpty(outputFlag(state), cfg.DefaultOutput, string(output.DefaultFormat)))
+	return output.ParseFormat(firstNonEmpty(state.out, cfg.DefaultOutput, string(output.DefaultFormat)))
 }
 
 func firstNonEmpty(values ...string) string {

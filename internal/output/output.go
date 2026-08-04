@@ -26,6 +26,18 @@ const (
 // endpoint. Tables remain available via -o table.
 const DefaultFormat = JSON
 
+// ParseFormat validates a format name from --output or default_output. Unknown values are
+// rejected rather than falling through to the table renderer, which is what Write would
+// otherwise do: it tests for JSON and CSV, so anything else silently rendered as a table.
+func ParseFormat(value string) (Format, error) {
+	switch f := Format(strings.ToLower(strings.TrimSpace(value))); f {
+	case Table, JSON, CSV:
+		return f, nil
+	default:
+		return "", fmt.Errorf("unknown output format %q (use json, table, or csv)", value)
+	}
+}
+
 func Write(w io.Writer, raw json.RawMessage, format Format, compact bool, columns []string) error {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil

@@ -138,7 +138,7 @@ etherscan account txlist 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --page 1 --o
 etherscan account tokentx 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 -o table
 
 # Collect multiple pages for analysis
-etherscan account txlist 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --all --max-pages 50 --csv
+etherscan account txlist 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --all --max-pages 50 -o csv
 ```
 
 ### Inspect a smart contract
@@ -164,10 +164,10 @@ etherscan chains
 
 ```sh
 # Clean JSON for jq, Python, or an AI agent
-etherscan account txlist 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --json --compact | jq '.[0]'
+etherscan account txlist 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --compact | jq '.[0]'
 
 # CSV for spreadsheets and data pipelines
-etherscan account tokentx 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --csv > token-transfers.csv
+etherscan account tokentx 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 -o csv > token-transfers.csv
 ```
 
 ## Output and Pagination
@@ -177,9 +177,7 @@ JSON is the default, matching the Etherscan API's own `application/json` respons
 | Flag | Purpose |
 | --- | --- |
 | `--output <format>`, `-o <format>` | Select `json` (default), `table`, or `csv` |
-| `--json` | Print the raw API result as JSON |
 | `--compact` | Remove indentation from JSON output |
-| `--csv` | Print list-style results as CSV |
 | `--all` | Automatically follow pages for supported list commands |
 | `--max-pages <n>` | Stop `--all` after at most `n` pages (default: `20`) |
 
