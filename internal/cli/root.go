@@ -93,7 +93,7 @@ func newRootCommand(info BuildInfo, updates updateManager) *cobra.Command {
 	root.PersistentFlags().IntVar(&state.maxPages, "max-pages", 20, "maximum pages for --all")
 	hideFlags(root, "apikey", "base-url", "compact", "max-pages", "rate-limit", "timeout", "verbose", "debug", "yes")
 
-	root.AddCommand(loginCommand(state), logoutCommand(state), uninstallCommand(state), configCommand(state), chainsCommand(), whoamiCommand(state), versionCommand(info), updateCommand(info, updates), tuiCommand(state, info, updates), completionCommand(root))
+	root.AddCommand(loginCommand(state), logoutCommand(state), uninstallCommand(state), configCommand(state), chainsCommand(state), whoamiCommand(state), versionCommand(info), updateCommand(info, updates), tuiCommand(state, info, updates), completionCommand(root))
 	addEndpointCommands(root, state)
 	return root
 }
@@ -512,9 +512,8 @@ func configCommand(state *globalState) *cobra.Command {
 	return cmd
 }
 
-func chainsCommand() *cobra.Command {
-	cmd := &cobra.Command{Use: "chains", Short: "Manage supported chains"}
-	cmd.AddCommand(&cobra.Command{Use: "list", Short: "List supported chains", Run: func(cmd *cobra.Command, args []string) {
+func chainsCommand(state *globalState) *cobra.Command {
+	return &cobra.Command{Use: "chains", Short: "List supported chains", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		rows := make([]map[string]string, 0, len(chains.All()))
 		for _, c := range chains.All() {
 			freeTier := "available"
@@ -531,9 +530,8 @@ func chainsCommand() *cobra.Command {
 				"explorer":  c.Explorer,
 			})
 		}
-		_ = output.WriteRows(os.Stdout, rows, output.Table, []string{"id", "name", "slug", "free_tier", "testnet", "symbol", "explorer"})
-	}})
-	return cmd
+		return output.WriteRows(os.Stdout, rows, chainsFormat(state), []string{"id", "name", "slug", "free_tier", "testnet", "symbol", "explorer"})
+	}}
 }
 
 func whoamiCommand(state *globalState) *cobra.Command {
@@ -1261,6 +1259,15 @@ func outputFlag(state *globalState) string {
 		return string(output.CSV)
 	}
 	return state.out
+}
+
+// chainsFormat resolves the output format for `chains` without going through
+// runtime(): the chain list comes from the built-in registry, so the command must
+// work before `etherscan login`. A config load failure degrades to the flag value
+// or "table" rather than failing the listing.
+func chainsFormat(state *globalState) output.Format {
+	cfg, _, _ := config.Load()
+	return output.Format(firstNonEmpty(outputFlag(state), cfg.DefaultOutput, "table"))
 }
 
 func firstNonEmpty(values ...string) string {

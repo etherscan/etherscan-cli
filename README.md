@@ -157,7 +157,7 @@ etherscan --chain base gastracker oracle
 etherscan --chain 8453 account balance 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
 
 # See every chain built into this release
-etherscan chains list
+etherscan chains
 ```
 
 ### Build scripts and agent workflows
@@ -210,7 +210,7 @@ etherscan contract verify --help
 | `etherscan update` | Update a Homebrew or installer-script installation |
 | `etherscan whoami` | Show the active chain and masked API key |
 | `etherscan config` | Get, list, or set CLI configuration |
-| `etherscan chains list` | List chains built into this CLI release |
+| `etherscan chains` | List chains built into this CLI release |
 | `etherscan completion` | Generate shell completion |
 | `etherscan version` | Print the CLI version |
 | `etherscan --help` | Show command usage and available options |
