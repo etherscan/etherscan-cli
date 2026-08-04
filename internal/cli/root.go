@@ -241,7 +241,7 @@ func buildRuntime(state *globalState, cfg config.File, key string) (resolvedRunt
 	if !strings.HasPrefix(baseURL, "https://") {
 		fmt.Fprintf(os.Stderr, "warning: non-HTTPS base URL: %s\n", baseURL)
 	}
-	format := output.Format(firstNonEmpty(outputFlag(state), cfg.DefaultOutput, "table"))
+	format := output.Format(firstNonEmpty(outputFlag(state), cfg.DefaultOutput, string(output.DefaultFormat)))
 	return resolvedRuntime{
 		client: client.New(client.Options{BaseURL: baseURL, APIKey: key, ChainID: chain.ID, Timeout: state.timeout, RateLimit: state.rate, Verbose: state.verbose, Debug: state.debug, Stderr: os.Stderr}),
 		format: format,
@@ -470,7 +470,8 @@ func configCommand(state *globalState) *cobra.Command {
 		fmt.Fprintln(os.Stdout, "config:", path)
 		key, src := config.GetAPIKey(cfg)
 		fmt.Fprintf(os.Stdout, "default_chain=%s\n", cfg.DefaultChain)
-		fmt.Fprintf(os.Stdout, "default_output=%s\n", cfg.DefaultOutput)
+		// Print the effective format: DefaultOutput is empty unless explicitly set.
+		fmt.Fprintf(os.Stdout, "default_output=%s\n", firstNonEmpty(cfg.DefaultOutput, string(output.DefaultFormat)))
 		fmt.Fprintf(os.Stdout, "base_url=%s\n", cfg.BaseURL)
 		fmt.Fprintf(os.Stdout, "api_key=%s (%s)\n", config.Redact(key), src)
 		return nil
@@ -501,7 +502,7 @@ func configCommand(state *globalState) *cobra.Command {
 		case "default_chain":
 			fmt.Fprintln(os.Stdout, cfg.DefaultChain)
 		case "default_output":
-			fmt.Fprintln(os.Stdout, cfg.DefaultOutput)
+			fmt.Fprintln(os.Stdout, firstNonEmpty(cfg.DefaultOutput, string(output.DefaultFormat)))
 		case "base_url":
 			fmt.Fprintln(os.Stdout, cfg.BaseURL)
 		default:
@@ -1264,10 +1265,10 @@ func outputFlag(state *globalState) string {
 // chainsFormat resolves the output format for `chains` without going through
 // runtime(): the chain list comes from the built-in registry, so the command must
 // work before `etherscan login`. A config load failure degrades to the flag value
-// or "table" rather than failing the listing.
+// or the built-in default rather than failing the listing.
 func chainsFormat(state *globalState) output.Format {
 	cfg, _, _ := config.Load()
-	return output.Format(firstNonEmpty(outputFlag(state), cfg.DefaultOutput, "table"))
+	return output.Format(firstNonEmpty(outputFlag(state), cfg.DefaultOutput, string(output.DefaultFormat)))
 }
 
 func firstNonEmpty(values ...string) string {

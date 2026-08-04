@@ -32,7 +32,11 @@ func Load() (File, string, error) {
 	if err != nil {
 		return File{}, "", err
 	}
-	cfg := File{DefaultChain: "ethereum", DefaultOutput: "table"}
+	// DefaultOutput is deliberately left empty rather than seeded: Save writes the whole
+	// struct, so seeding it would persist an implicit choice into every user's config.toml
+	// (as it once did with "table") and pin them to it across future default changes.
+	// Callers resolve an empty value against output.DefaultFormat instead.
+	cfg := File{DefaultChain: "ethereum"}
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		return cfg, path, nil
 	}
@@ -41,9 +45,6 @@ func Load() (File, string, error) {
 	}
 	if cfg.DefaultChain == "" {
 		cfg.DefaultChain = "ethereum"
-	}
-	if cfg.DefaultOutput == "" {
-		cfg.DefaultOutput = "table"
 	}
 	return cfg, path, nil
 }

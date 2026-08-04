@@ -22,6 +22,10 @@ const (
 	CSV   Format = "csv"
 )
 
+// DefaultFormat matches the Etherscan API, which serves application/json for every
+// endpoint. Tables remain available via -o table.
+const DefaultFormat = JSON
+
 func Write(w io.Writer, raw json.RawMessage, format Format, compact bool, columns []string) error {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil
@@ -215,6 +219,15 @@ func formatTableCell(column, value string) string {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
 		return value
+	}
+	// Cell values may contain newlines (contract SourceCode is the worst case). writeTable
+	// runs with SetAutoWrapText(false), so an unsanitised newline splits one logical row
+	// across several physical lines and misaligns every following column. Collapse runs of
+	// whitespace before the truncation rules below, which would otherwise keep newlines
+	// that happen to fall inside the retained prefix.
+	if strings.ContainsAny(trimmed, "\r\n\t\v\f") {
+		trimmed = strings.Join(strings.Fields(trimmed), " ")
+		value = trimmed
 	}
 	switch strings.ToLower(column) {
 	case "timestamp", "timestampunix", "time_stamp":
