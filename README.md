@@ -23,7 +23,7 @@ The official command-line client and interactive explorer for the [Etherscan V2 
 
 - **Explore interactively** — browse endpoints, fill parameters, switch chains, and inspect results without memorizing commands.
 - **Use one multichain interface** — query Ethereum and supported EVM chains by name or chain ID.
-- **Work with humans or machines** — read tables in a terminal or emit clean JSON and CSV for automation.
+- **Work with humans or machines** — emit clean JSON by default for scripts and agents, or switch to tables and CSV when a human or a spreadsheet is reading.
 - **Reach broad API coverage** — access accounts, contracts, tokens, logs, blocks, gas, stats, name tags, and proxy methods, with automatic pagination for list endpoints.
 
 ## Install
@@ -134,11 +134,11 @@ The explorer can be opened before authentication and asks you to validate and sa
 # Recent normal transactions
 etherscan account txlist 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --page 1 --offset 10
 
-# ERC-20 transfers as JSON
-etherscan account tokentx 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --json
+# ERC-20 transfers as a readable table instead of the default JSON
+etherscan account tokentx 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 -o table
 
 # Collect multiple pages for analysis
-etherscan account txlist 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --all --max-pages 50 --csv
+etherscan account txlist 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --all --max-pages 50 -o csv
 ```
 
 ### Inspect a smart contract
@@ -146,7 +146,7 @@ etherscan account txlist 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --all --max-
 ```sh
 # WETH contract ABI and verified source metadata
 etherscan contract getabi 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
-etherscan contract getsourcecode 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 --json
+etherscan contract getsourcecode 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
 ```
 
 ### Switch chains
@@ -157,29 +157,27 @@ etherscan --chain base gastracker oracle
 etherscan --chain 8453 account balance 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
 
 # See every chain built into this release
-etherscan chains list
+etherscan chains
 ```
 
 ### Build scripts and agent workflows
 
 ```sh
 # Clean JSON for jq, Python, or an AI agent
-etherscan account txlist 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --json --compact | jq '.[0]'
+etherscan account txlist 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --compact | jq '.[0]'
 
 # CSV for spreadsheets and data pipelines
-etherscan account tokentx 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --csv > token-transfers.csv
+etherscan account tokentx 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 -o csv > token-transfers.csv
 ```
 
 ## Output and Pagination
 
-Tables are the default. API results are written to stdout; progress messages, warnings, diagnostics, and errors go to stderr so stdout remains suitable for pipelines and redirection.
+JSON is the default, matching the Etherscan API's own `application/json` responses. Use `-o table` for a readable terminal view of row-shaped results. API results are written to stdout; progress messages, warnings, diagnostics, and errors go to stderr so stdout remains suitable for pipelines and redirection.
 
 | Flag | Purpose |
 | --- | --- |
-| `--output <format>`, `-o <format>` | Select `table`, `json`, or `csv` |
-| `--json` | Print the raw API result as JSON |
+| `--output <format>`, `-o <format>` | Select `json` (default), `table`, or `csv` |
 | `--compact` | Remove indentation from JSON output |
-| `--csv` | Print list-style results as CSV |
 | `--all` | Automatically follow pages for supported list commands |
 | `--max-pages <n>` | Stop `--all` after at most `n` pages (default: `20`) |
 
@@ -210,7 +208,7 @@ etherscan contract verify --help
 | `etherscan update` | Update a Homebrew or installer-script installation |
 | `etherscan whoami` | Show the active chain and masked API key |
 | `etherscan config` | Get, list, or set CLI configuration |
-| `etherscan chains list` | List chains built into this CLI release |
+| `etherscan chains` | List chains built into this CLI release |
 | `etherscan completion` | Generate shell completion |
 | `etherscan version` | Print the CLI version |
 | `etherscan --help` | Show command usage and available options |
@@ -366,7 +364,7 @@ Manage non-secret defaults with:
 ```sh
 etherscan config list
 etherscan config set default_chain=base
-etherscan config set default_output=json
+etherscan config set default_output=table
 ```
 
 For the active chain, `--chain` takes precedence over `ETHERSCAN_CHAIN`, which takes precedence over `default_chain` in the configuration file.
