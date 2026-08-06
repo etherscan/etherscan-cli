@@ -123,6 +123,7 @@ try {
         throw "npm installation accepted an invalid release checksum"
     }
 
+    $global:LASTEXITCODE = 0
     Write-Host "npm package tests passed."
 }
 finally {
