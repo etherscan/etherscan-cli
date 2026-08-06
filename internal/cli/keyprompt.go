@@ -24,7 +24,7 @@ const (
 	keyPromptHeadline = "Etherscan API V2"
 	keyPromptTitle    = "Connect your API key"
 	keyPromptHint     = "Paste your Etherscan API key to save it for future commands."
-	keyPromptGetKey   = "Get a free key at https://etherscan.io/api/pricing"
+	keyPromptGetKey   = "Get a free key at https://docs.etherscan.io/getting-started"
 
 	// keyPromptGutter is the width the rail itself occupies: one border column
 	// plus one column of padding.

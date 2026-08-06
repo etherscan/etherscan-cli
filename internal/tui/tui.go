@@ -732,7 +732,7 @@ func (m model) viewAPIKey() string {
 	var b strings.Builder
 	b.WriteString(headSt.Render("Connect your API key") + "\n")
 	b.WriteString(subSt.Render("An API key is needed to run this endpoint. You can keep exploring without one.") + "\n")
-	b.WriteString(subSt.Render("Get a free key at https://etherscan.io/api/pricing") + "\n\n")
+	b.WriteString(subSt.Render("Get a free key at https://docs.etherscan.io/getting-started") + "\n\n")
 	if m.keySaving {
 		b.WriteString(m.spin.View() + " validating key…\n")
 	} else {
