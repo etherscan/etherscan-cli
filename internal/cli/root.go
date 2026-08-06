@@ -591,7 +591,7 @@ func updateCommand(info BuildInfo, updates updateManager) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if method != "" && !updater.ValidMethod(method) {
-				return fmt.Errorf("unsupported update method %q (use homebrew or script)", method)
+				return fmt.Errorf("unsupported update method %q (use homebrew, npm, or script)", method)
 			}
 			result, err := updates.Check(cmd.Context(), info.Version, true)
 			if err != nil {
@@ -601,8 +601,19 @@ func updateCommand(info BuildInfo, updates updateManager) *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "Etherscan CLI %s is already up to date.\n", result.Current)
 				return nil
 			}
+			detectedMethod := updates.DetectMethod()
+			if detectedMethod == updater.MethodNPM {
+				fmt.Fprintln(cmd.OutOrStdout(), "This installation is managed by npm. Run:")
+				fmt.Fprintln(cmd.OutOrStdout(), "  npm install -g @etherscan/etherscan@latest")
+				return nil
+			}
 			if method == "" {
-				method = updates.DetectMethod()
+				method = detectedMethod
+			}
+			if method == updater.MethodNPM {
+				fmt.Fprintln(cmd.OutOrStdout(), "This installation is managed by npm. Run:")
+				fmt.Fprintln(cmd.OutOrStdout(), "  npm install -g @etherscan/etherscan@latest")
+				return nil
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Updating Etherscan CLI %s -> %s using %s...\n", result.Current, result.Latest, method)
 			background, err := updates.Upgrade(cmd.Context(), method, result.Latest, cmd.OutOrStdout(), cmd.ErrOrStderr())
@@ -617,7 +628,7 @@ func updateCommand(info BuildInfo, updates updateManager) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&method, "method", "", "update method: homebrew or script")
+	cmd.Flags().StringVar(&method, "method", "", "update method: homebrew, npm, or script")
 	return cmd
 }
 
@@ -643,6 +654,11 @@ func offerUpdate(ctx context.Context, updates updateManager, current string, in 
 	switch strings.TrimSpace(choice) {
 	case "1":
 		method := updates.DetectMethod()
+		if method == updater.MethodNPM {
+			fmt.Fprintln(out, "This installation is managed by npm. Run:")
+			fmt.Fprintln(out, "  npm install -g @etherscan/etherscan@latest")
+			return true, nil
+		}
 		fmt.Fprintf(out, "Updating with %s...\n", method)
 		background, err := updates.Upgrade(ctx, method, result.Latest, out, errOut)
 		if err != nil {

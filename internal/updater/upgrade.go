@@ -15,6 +15,7 @@ import (
 
 const (
 	MethodHomebrew = "homebrew"
+	MethodNPM      = "npm"
 	MethodScript   = "script"
 )
 
@@ -23,12 +24,18 @@ var runtimeGOOS = runtime.GOOS
 type commandRunner func(context.Context, string, []string, io.Writer, io.Writer, bool) error
 
 func (s *Service) DetectMethod() string {
+	if strings.EqualFold(os.Getenv("ETHERSCAN_INSTALL_METHOD"), MethodNPM) {
+		return MethodNPM
+	}
 	executable, err := s.executable()
 	if err == nil {
 		if resolved, resolveErr := filepath.EvalSymlinks(executable); resolveErr == nil {
 			executable = resolved
 		}
 		normalized := strings.ToLower(filepath.ToSlash(executable))
+		if strings.Contains(normalized, "/node_modules/@etherscan/etherscan/") {
+			return MethodNPM
+		}
 		if strings.Contains(normalized, "/cellar/etherscan/") || strings.Contains(normalized, "/linuxbrew/.linuxbrew/cellar/etherscan/") {
 			return MethodHomebrew
 		}
@@ -37,7 +44,7 @@ func (s *Service) DetectMethod() string {
 }
 
 func ValidMethod(method string) bool {
-	return method == MethodHomebrew || method == MethodScript
+	return method == MethodHomebrew || method == MethodNPM || method == MethodScript
 }
 
 // Upgrade installs a stable release. The returned background value is true on
@@ -52,7 +59,10 @@ func (s *Service) Upgrade(ctx context.Context, method, version string, stdout, s
 		method = s.DetectMethod()
 	}
 	if !ValidMethod(method) {
-		return false, fmt.Errorf("unsupported update method %q (use homebrew or script)", method)
+		return false, fmt.Errorf("unsupported update method %q (use homebrew, npm, or script)", method)
+	}
+	if method == MethodNPM {
+		return false, fmt.Errorf("npm manages this installation; run npm install -g @etherscan/etherscan@latest")
 	}
 	if method == MethodHomebrew {
 		if _, err := s.lookPath()("brew"); err != nil {
