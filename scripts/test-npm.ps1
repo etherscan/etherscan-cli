@@ -58,7 +58,14 @@ try {
     }
 
     $env:ETHERSCAN_INSTALL_TEST_DOWNLOAD_BASE_URL = $fixtureDirectory
-    Invoke-Checked npm.cmd @("install", "--global", "--prefix", $prefixDirectory, $tarball)
+    $savedPSModulePath = $env:PSModulePath
+    $env:PSModulePath = ""
+    try {
+        Invoke-Checked npm.cmd @("install", "--global", "--prefix", $prefixDirectory, $tarball)
+    }
+    finally {
+        $env:PSModulePath = $savedPSModulePath
+    }
     $globalOutput = & (Join-Path $prefixDirectory "etherscan.cmd") version
     if ($LASTEXITCODE -ne 0 -or ($globalOutput -join "`n").Trim() -ne $version) {
         throw "global npm installation returned unexpected version: $globalOutput"
