@@ -1,0 +1,39 @@
+{
+  "name": "@etherscan/etherscan",
+  "version": "0.0.0-development",
+  "description": "Command-line client and interactive explorer for the Etherscan V2 API",
+  "license": "MIT",
+  "homepage": "https://github.com/etherscan/etherscan-cli",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/etherscan/etherscan-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/etherscan/etherscan-cli/issues"
+  },
+  "type": "commonjs",
+  "bin": {
+    "etherscan": "npm/bin/etherscan.js"
+  },
+  "scripts": {
+    "postinstall": "node npm/postinstall.js",
+    "prepublishOnly": "node npm/prepublish-check.js",
+    "test:package": "npm pack --dry-run",
+    "test:release": "node npm/publish.test.js"
+  },
+  "files": [
+    "npm/bin/etherscan.js",
+    "npm/postinstall.js",
+    "npm/prepublish-check.js",
+    "scripts/install.sh",
+    "scripts/install.ps1",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

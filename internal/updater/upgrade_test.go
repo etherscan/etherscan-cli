@@ -23,6 +23,25 @@ func TestDetectMethod(t *testing.T) {
 	if got := service.DetectMethod(); got != MethodScript {
 		t.Fatalf("DetectMethod() = %q, want %q", got, MethodScript)
 	}
+	service.Executable = func() (string, error) {
+		return filepath.Join(string(filepath.Separator), "usr", "lib", "node_modules", "@etherscan", "etherscan", "vendor", "etherscan"), nil
+	}
+	if got := service.DetectMethod(); got != MethodNPM {
+		t.Fatalf("DetectMethod() = %q, want %q", got, MethodNPM)
+	}
+	t.Setenv("ETHERSCAN_INSTALL_METHOD", MethodNPM)
+	service.Executable = func() (string, error) { return filepath.Join(t.TempDir(), "etherscan"), nil }
+	if got := service.DetectMethod(); got != MethodNPM {
+		t.Fatalf("DetectMethod() with npm marker = %q, want %q", got, MethodNPM)
+	}
+}
+
+func TestNPMUpgradeReturnsPackageManagerInstruction(t *testing.T) {
+	service := NewService()
+	_, err := service.Upgrade(context.Background(), MethodNPM, "1.2.0", &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "npm install -g @etherscan/etherscan@latest") {
+		t.Fatalf("Upgrade() error = %v, want npm install instruction", err)
+	}
 }
 
 func TestScriptUpgradeDispatch(t *testing.T) {

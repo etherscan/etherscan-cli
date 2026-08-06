@@ -93,6 +93,24 @@ function Copy-InstallerFile {
     Invoke-WebRequest -Uri $uri -OutFile $Destination -Headers $headers -UseBasicParsing
 }
 
+function Get-SHA256FileHash {
+    param([string]$Path)
+
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [IO.File]::OpenRead($Path)
+        try {
+            return ([BitConverter]::ToString($sha256.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
+        }
+        finally {
+            $stream.Dispose()
+        }
+    }
+    finally {
+        $sha256.Dispose()
+    }
+}
+
 function Add-EtherscanToUserPath {
     param([string]$Directory)
 
@@ -173,7 +191,7 @@ try {
     }
 
     $expectedHash = $Matches[1].ToLowerInvariant()
-    $actualHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $actualHash = Get-SHA256FileHash -Path $archivePath
     if ($actualHash -ne $expectedHash) {
         throw "Checksum verification failed for $archiveName. Expected $expectedHash, received $actualHash."
     }

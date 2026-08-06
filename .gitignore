@@ -1,6 +1,8 @@
 # Build output
 /bin/
 /dist/
+/vendor/
+*.tgz
 *.exe
 *.exe~
 *.dll

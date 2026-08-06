@@ -78,6 +78,18 @@ func TestOfferUpdateChoices(t *testing.T) {
 			t.Fatalf("unexpected result: exit=%v err=%v manager=%+v", exit, err, manager)
 		}
 	})
+
+	t.Run("npm update instruction", func(t *testing.T) {
+		manager := &fakeUpdateManager{result: result, method: updater.MethodNPM}
+		var out bytes.Buffer
+		exit, err := offerUpdate(context.Background(), manager, "1.1.0", strings.NewReader("1\n"), &out, &bytes.Buffer{})
+		if err != nil || !exit || manager.upgradedVersion != "" {
+			t.Fatalf("unexpected result: exit=%v err=%v manager=%+v", exit, err, manager)
+		}
+		if !strings.Contains(out.String(), "npm install -g @etherscan/etherscan@latest") {
+			t.Fatalf("output = %q, want npm install instruction", out.String())
+		}
+	})
 }
 
 func TestUpdateCommandUsesRequestedMethod(t *testing.T) {
@@ -95,5 +107,47 @@ func TestUpdateCommandUsesRequestedMethod(t *testing.T) {
 	}
 	if manager.upgradedMethod != updater.MethodHomebrew || manager.upgradedVersion != "1.2.0" {
 		t.Fatalf("unexpected update: %+v", manager)
+	}
+}
+
+func TestUpdateCommandShowsNPMInstruction(t *testing.T) {
+	manager := &fakeUpdateManager{
+		result: updater.Result{Current: "1.1.0", Latest: "1.2.0", Checked: true, UpdateAvailable: true},
+		method: updater.MethodNPM,
+	}
+	root := newRootCommand(BuildInfo{Version: "1.1.0"}, manager)
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"update"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if manager.upgradedVersion != "" {
+		t.Fatalf("npm update invoked updater: %+v", manager)
+	}
+	if !strings.Contains(out.String(), "npm install -g @etherscan/etherscan@latest") {
+		t.Fatalf("output = %q, want npm install instruction", out.String())
+	}
+}
+
+func TestUpdateCommandCannotForceScriptForNPMInstallation(t *testing.T) {
+	manager := &fakeUpdateManager{
+		result: updater.Result{Current: "1.1.0", Latest: "1.2.0", Checked: true, UpdateAvailable: true},
+		method: updater.MethodNPM,
+	}
+	root := newRootCommand(BuildInfo{Version: "1.1.0"}, manager)
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"update", "--method", "script"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if manager.upgradedVersion != "" {
+		t.Fatalf("npm update invoked forced script updater: %+v", manager)
+	}
+	if !strings.Contains(out.String(), "npm install -g @etherscan/etherscan@latest") {
+		t.Fatalf("output = %q, want npm install instruction", out.String())
 	}
 }

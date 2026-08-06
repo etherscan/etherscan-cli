@@ -37,6 +37,23 @@ brew install etherscan/etherscan-cli/etherscan
 etherscan version
 ```
 
+### npm — macOS, Linux, and Windows
+
+Install the CLI globally:
+
+```sh
+npm install -g @etherscan/etherscan
+etherscan version
+```
+
+Or run it once without keeping a global installation:
+
+```sh
+npx @etherscan/etherscan version
+```
+
+The npm package downloads the matching native release archive and verifies its SHA-256 checksum during installation. Lifecycle scripts must be enabled.
+
 ### Installation script — macOS and Linux
 
 ```sh
@@ -376,11 +393,12 @@ Update through the same channel used to install the CLI:
 | Installation channel | Update command |
 | --- | --- |
 | Homebrew | `brew upgrade etherscan/etherscan-cli/etherscan` |
+| npm | `npm install -g @etherscan/etherscan@latest` |
 | macOS/Linux or Windows installer script | `etherscan update` |
 | Go | `go install github.com/etherscan/etherscan-cli/cmd/etherscan@latest` |
 | Manual release archive | Download and verify the new archive from [GitHub Releases](https://github.com/etherscan/etherscan-cli/releases/latest) |
 
-Use the channel-specific command above rather than mixing update mechanisms. `etherscan update` is intended for Homebrew and installer-script installations.
+Use the channel-specific command above rather than mixing update mechanisms. For an npm-managed installation, `etherscan update` prints the npm command without modifying files under `node_modules`.
 
 ## Shell completion
 
@@ -406,6 +424,10 @@ go build -o etherscan ./cmd/etherscan
 ```
 
 Installer changes can be checked with `sh scripts/test-install.sh` on macOS/Linux or `./scripts/test-install.ps1` in PowerShell on Windows.
+
+The npm distribution can be checked with `sh scripts/test-npm.sh` on macOS/Linux or `./scripts/test-npm.ps1` in PowerShell. These tests pack and install the package against local fixture release archives; they do not publish to npm.
+
+For the first npm release, publish the GitHub release assets before publishing the package. From an exact release-tag checkout, run `npm version --no-git-tag-version <version>` followed by `npm publish --access public`. Then configure npm trusted publishing for `etherscan/etherscan-cli` and `.github/workflows/release.yml`, and set the `NPM_PUBLISH_ENABLED` repository variable to `true` for later tagged releases.
 
 ## API coverage and support
 
