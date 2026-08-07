@@ -10,6 +10,6 @@ try {
     throw new Error(`invalid release version: ${packageInfo.version}`);
   }
 } catch (error) {
-  console.error(`Refusing to publish @etherscan/etherscan: ${error.message}`);
+  console.error(`Refusing to publish @etherscan/cli: ${error.message}`);
   process.exit(1);
 }

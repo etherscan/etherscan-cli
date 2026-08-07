@@ -16,7 +16,7 @@ const executable = path.join(
 if (!fs.existsSync(executable)) {
   console.error(
     "Etherscan CLI is not installed in this npm package. " +
-      "Reinstall @etherscan/etherscan without --ignore-scripts.",
+      "Reinstall @etherscan/cli without --ignore-scripts.",
   );
   process.exit(1);
 }

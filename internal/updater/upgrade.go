@@ -33,7 +33,7 @@ func (s *Service) DetectMethod() string {
 			executable = resolved
 		}
 		normalized := strings.ToLower(filepath.ToSlash(executable))
-		if strings.Contains(normalized, "/node_modules/@etherscan/etherscan/") {
+		if strings.Contains(normalized, "/node_modules/@etherscan/cli/") {
 			return MethodNPM
 		}
 		if strings.Contains(normalized, "/cellar/etherscan/") || strings.Contains(normalized, "/linuxbrew/.linuxbrew/cellar/etherscan/") {
@@ -62,7 +62,7 @@ func (s *Service) Upgrade(ctx context.Context, method, version string, stdout, s
 		return false, fmt.Errorf("unsupported update method %q (use homebrew, npm, or script)", method)
 	}
 	if method == MethodNPM {
-		return false, fmt.Errorf("npm manages this installation; run npm install -g @etherscan/etherscan@latest")
+		return false, fmt.Errorf("npm manages this installation; run npm install -g @etherscan/cli@latest")
 	}
 	if method == MethodHomebrew {
 		if _, err := s.lookPath()("brew"); err != nil {

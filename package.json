@@ -1,5 +1,5 @@
 {
-  "name": "@etherscan/etherscan",
+  "name": "@etherscan/cli",
   "version": "0.0.0-development",
   "description": "Command-line client and interactive explorer for the Etherscan V2 API",
   "license": "MIT",

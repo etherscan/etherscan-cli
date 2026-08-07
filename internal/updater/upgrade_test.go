@@ -24,7 +24,7 @@ func TestDetectMethod(t *testing.T) {
 		t.Fatalf("DetectMethod() = %q, want %q", got, MethodScript)
 	}
 	service.Executable = func() (string, error) {
-		return filepath.Join(string(filepath.Separator), "usr", "lib", "node_modules", "@etherscan", "etherscan", "vendor", "etherscan"), nil
+		return filepath.Join(string(filepath.Separator), "usr", "lib", "node_modules", "@etherscan", "cli", "vendor", "etherscan"), nil
 	}
 	if got := service.DetectMethod(); got != MethodNPM {
 		t.Fatalf("DetectMethod() = %q, want %q", got, MethodNPM)
@@ -39,7 +39,7 @@ func TestDetectMethod(t *testing.T) {
 func TestNPMUpgradeReturnsPackageManagerInstruction(t *testing.T) {
 	service := NewService()
 	_, err := service.Upgrade(context.Background(), MethodNPM, "1.2.0", &bytes.Buffer{}, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "npm install -g @etherscan/etherscan@latest") {
+	if err == nil || !strings.Contains(err.Error(), "npm install -g @etherscan/cli@latest") {
 		t.Fatalf("Upgrade() error = %v, want npm install instruction", err)
 	}
 }
