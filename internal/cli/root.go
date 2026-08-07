@@ -604,7 +604,7 @@ func updateCommand(info BuildInfo, updates updateManager) *cobra.Command {
 			detectedMethod := updates.DetectMethod()
 			if detectedMethod == updater.MethodNPM {
 				fmt.Fprintln(cmd.OutOrStdout(), "This installation is managed by npm. Run:")
-				fmt.Fprintln(cmd.OutOrStdout(), "  npm install -g @etherscan/etherscan@latest")
+				fmt.Fprintln(cmd.OutOrStdout(), "  npm install -g @etherscan/cli@latest")
 				return nil
 			}
 			if method == "" {
@@ -612,7 +612,7 @@ func updateCommand(info BuildInfo, updates updateManager) *cobra.Command {
 			}
 			if method == updater.MethodNPM {
 				fmt.Fprintln(cmd.OutOrStdout(), "This installation is managed by npm. Run:")
-				fmt.Fprintln(cmd.OutOrStdout(), "  npm install -g @etherscan/etherscan@latest")
+				fmt.Fprintln(cmd.OutOrStdout(), "  npm install -g @etherscan/cli@latest")
 				return nil
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Updating Etherscan CLI %s -> %s using %s...\n", result.Current, result.Latest, method)
@@ -656,7 +656,7 @@ func offerUpdate(ctx context.Context, updates updateManager, current string, in 
 		method := updates.DetectMethod()
 		if method == updater.MethodNPM {
 			fmt.Fprintln(out, "This installation is managed by npm. Run:")
-			fmt.Fprintln(out, "  npm install -g @etherscan/etherscan@latest")
+			fmt.Fprintln(out, "  npm install -g @etherscan/cli@latest")
 			return true, nil
 		}
 		fmt.Fprintf(out, "Updating with %s...\n", method)
