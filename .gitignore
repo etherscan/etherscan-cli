@@ -9,6 +9,9 @@
 *.so
 *.dylib
 
+# npm (root package.json ships the CLI; installs create these)
+/node_modules/
+
 # Go test / coverage artifacts
 *.test
 *.out
