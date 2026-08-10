@@ -42,17 +42,19 @@ etherscan version
 Install the CLI globally:
 
 ```sh
-npm install -g @etherscan/cli
+npm install -g @etherscan-npm/cli
 etherscan version
 ```
 
 Or run it once without keeping a global installation:
 
 ```sh
-npx @etherscan/cli version
+npx @etherscan-npm/cli version
 ```
 
 The npm package downloads the matching native release archive and verifies its SHA-256 checksum during installation. Lifecycle scripts must be enabled.
+
+> The package is currently published as `@etherscan-npm/cli` while the `@etherscan` npm scope is being transferred. The `etherscan` command is unchanged.
 
 ### Installation script — macOS and Linux
 
@@ -393,7 +395,7 @@ Update through the same channel used to install the CLI:
 | Installation channel | Update command |
 | --- | --- |
 | Homebrew | `brew upgrade etherscan/etherscan-cli/etherscan` |
-| npm | `npm install -g @etherscan/cli@latest` |
+| npm | `npm install -g @etherscan-npm/cli@latest` |
 | macOS/Linux or Windows installer script | `etherscan update` |
 | Go | `go install github.com/etherscan/etherscan-cli/cmd/etherscan@latest` |
 | Manual release archive | Download and verify the new archive from [GitHub Releases](https://github.com/etherscan/etherscan-cli/releases/latest) |
