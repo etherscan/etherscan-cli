@@ -94,6 +94,30 @@ Ensure your Go binary directory (`GOBIN`, or `GOPATH/bin` by default) is on `PAT
 
 Download the archive for your operating system and architecture plus `checksums.txt` from [GitHub Releases](https://github.com/etherscan/etherscan-cli/releases/latest). Verify the archive's SHA-256 checksum, extract it, and place `etherscan` (or `etherscan.exe`) on your `PATH`.
 
+## Uninstall
+
+Run:
+
+```sh
+etherscan uninstall
+```
+
+The command shows the exact package-manager action or executable and configuration paths before asking for confirmation. Use `--yes` to skip the prompt. Homebrew and npm installations are removed through their owning package manager. Installer, Go, manual, and source builds remove only the exact running executable; custom directories and `PATH` entries are left alone unless the installer recorded that it added them and the directory contains no other files.
+
+The command never requests administrator privileges. If a manually copied binary is in a protected location, it leaves the saved configuration intact and prints the exact command needed to remove the binary. Manually created aliases or separate symlinks may also need to be removed by hand.
+
+The installer scripts can remove a script installation without downloading a release archive:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/etherscan/etherscan-cli/master/scripts/install.sh | sh -s -- --uninstall
+```
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/etherscan/etherscan-cli/master/scripts/install.ps1))) -Uninstall
+```
+
+Uninstall removes the saved configuration directory. If `ETHERSCAN_API_KEY` is set, unset it separately in the shell or environment where it is defined.
+
 ## Get started
 
 ### 1. Create an API key
@@ -223,7 +247,7 @@ etherscan contract verify --help
 | `etherscan tui` | Launch the interactive explorer |
 | `etherscan login` | Validate and store an API key |
 | `etherscan logout` | Remove the stored API key |
-| `etherscan uninstall` | Remove all CLI configuration |
+| `etherscan uninstall` | Remove the CLI and saved configuration |
 | `etherscan update` | Update a Homebrew or installer-script installation |
 | `etherscan whoami` | Show the active chain and masked API key |
 | `etherscan config` | Get, list, or set CLI configuration |

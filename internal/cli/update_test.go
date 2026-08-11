@@ -11,13 +11,16 @@ import (
 )
 
 type fakeUpdateManager struct {
-	result          updater.Result
-	checkErr        error
-	method          string
-	skipped         string
-	upgradedMethod  string
-	upgradedVersion string
-	background      bool
+	result            updater.Result
+	checkErr          error
+	method            string
+	skipped           string
+	upgradedMethod    string
+	upgradedVersion   string
+	background        bool
+	uninstalledMethod string
+	uninstallCalls    int
+	uninstallErr      error
 }
 
 func (f *fakeUpdateManager) Check(context.Context, string, bool) (updater.Result, error) {
@@ -35,6 +38,12 @@ func (f *fakeUpdateManager) Upgrade(_ context.Context, method, version string, _
 	f.upgradedMethod = method
 	f.upgradedVersion = version
 	return f.background, nil
+}
+
+func (f *fakeUpdateManager) Uninstall(_ context.Context, method string, _, _ io.Writer) (bool, error) {
+	f.uninstallCalls++
+	f.uninstalledMethod = method
+	return f.background, f.uninstallErr
 }
 
 func TestOfferUpdateChoices(t *testing.T) {

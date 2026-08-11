@@ -57,6 +57,7 @@ type updateManager interface {
 	Skip(string) error
 	DetectMethod() string
 	Upgrade(context.Context, string, string, io.Writer, io.Writer) (bool, error)
+	Uninstall(context.Context, string, io.Writer, io.Writer) (bool, error)
 }
 
 func NewRootCommand(info BuildInfo) *cobra.Command {
@@ -104,7 +105,7 @@ func newRootCommand(info BuildInfo, updates updateManager) *cobra.Command {
 		return err
 	})
 
-	root.AddCommand(loginCommand(state), logoutCommand(state), uninstallCommand(state), configCommand(state), chainsCommand(state), whoamiCommand(state), versionCommand(info), updateCommand(info, updates), tuiCommand(state, info, updates), completionCommand(root))
+	root.AddCommand(loginCommand(state), logoutCommand(state), uninstallCommand(state, updates), configCommand(state), chainsCommand(state), whoamiCommand(state), versionCommand(info), updateCommand(info, updates), tuiCommand(state, info, updates), completionCommand(root))
 	addEndpointCommands(root, state)
 	return root
 }
@@ -162,7 +163,7 @@ func endpointCommand(state *globalState, spec EndpointSpec) *cobra.Command {
 				return fmt.Errorf("%s/%s is only supported on Ethereum mainnet", spec.Module, spec.Action)
 			}
 			if spec.Sensitive && !state.yes {
-				if err := confirm(cmd.Context(), fmt.Sprintf("Submit %s/%s?", spec.Module, spec.Action)); err != nil {
+				if err := confirm(cmd.Context(), fmt.Sprintf("Submit %s/%s?", spec.Module, spec.Action), cmd.InOrStdin(), cmd.ErrOrStderr()); err != nil {
 					return err
 				}
 			}
@@ -440,38 +441,67 @@ func logoutCommand(state *globalState) *cobra.Command {
 	}
 }
 
-func uninstallCommand(state *globalState) *cobra.Command {
+func uninstallCommand(state *globalState, updates updateManager) *cobra.Command {
 	return &cobra.Command{
 		Use:   "uninstall",
-		Short: "Remove all etherscan CLI configuration (API key and settings)",
+		Short: "Remove Etherscan CLI and its saved configuration",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path, err := config.DefaultPath()
+			method := updates.DetectMethod()
+			prompt, err := uninstallPrompt(method)
 			if err != nil {
 				return err
 			}
-			dir := filepath.Dir(path)
-			if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
-				fmt.Fprintln(os.Stdout, "Nothing to remove; no configuration found.")
-				return nil
-			} else if err != nil {
-				return err
-			}
 			if !state.yes {
-				if err := confirm(cmd.Context(), fmt.Sprintf("Remove all configuration in %s?", dir)); err != nil {
+				if err := confirm(cmd.Context(), prompt, cmd.InOrStdin(), cmd.ErrOrStderr()); err != nil {
 					return err
 				}
 			}
-			if err := os.RemoveAll(dir); err != nil {
+			background, err := updates.Uninstall(cmd.Context(), method, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			if err != nil {
 				return err
 			}
-			fmt.Fprintf(os.Stdout, "Removed %s\n", dir)
+			if background {
+				fmt.Fprintln(cmd.OutOrStdout(), "Uninstall scheduled; removal will finish after this process exits.")
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), "Etherscan CLI uninstalled.")
+			}
+			if method == updater.MethodScript {
+				fmt.Fprintln(cmd.ErrOrStderr(), "note: manually created aliases or symlinks may still need to be removed.")
+			}
 			if os.Getenv("ETHERSCAN_API_KEY") != "" {
-				fmt.Fprintln(os.Stderr, "note: ETHERSCAN_API_KEY is still set in your environment; unset it in your shell to fully remove the key.")
+				fmt.Fprintln(cmd.ErrOrStderr(), "note: ETHERSCAN_API_KEY is still set in your environment; unset it in your shell to fully remove the key.")
 			}
 			return nil
 		},
 	}
+}
+
+func uninstallPrompt(method string) (string, error) {
+	configPath, err := config.DefaultPath()
+	if err != nil {
+		return "", err
+	}
+	var action string
+	switch method {
+	case updater.MethodHomebrew:
+		action = "  run     brew uninstall etherscan/etherscan-cli/etherscan"
+	case updater.MethodNPM:
+		packageName, err := updater.NPMPackageName()
+		if err != nil {
+			return "", err
+		}
+		action = "  run     npm uninstall -g " + packageName
+	case updater.MethodScript:
+		executable, err := os.Executable()
+		if err != nil {
+			return "", fmt.Errorf("locate current executable: %w", err)
+		}
+		action = fmt.Sprintf("  binary  %s\n  PATH    removed only with installer provenance and no shared files", executable)
+	default:
+		return "", fmt.Errorf("unsupported uninstall method %q", method)
+	}
+	return fmt.Sprintf("This will remove Etherscan CLI:\n%s\n  config  %s\n\nProceed?", action, filepath.Dir(configPath)), nil
 }
 
 func configCommand(state *globalState) *cobra.Command {
@@ -1267,11 +1297,11 @@ func populateFileParam(state *globalState, params map[string]string) error {
 	return nil
 }
 
-func confirm(ctx context.Context, prompt string) error {
-	fmt.Fprintf(os.Stderr, "%s [y/N] ", prompt)
+func confirm(ctx context.Context, prompt string, input io.Reader, output io.Writer) error {
+	fmt.Fprintf(output, "%s [y/N] ", prompt)
 	done := make(chan string, 1)
 	go func() {
-		reader := bufio.NewReader(os.Stdin)
+		reader := bufio.NewReader(input)
 		line, _ := reader.ReadString('\n')
 		done <- strings.TrimSpace(strings.ToLower(line))
 	}()

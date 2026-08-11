@@ -17,6 +17,12 @@ const (
 	MethodHomebrew = "homebrew"
 	MethodNPM      = "npm"
 	MethodScript   = "script"
+
+	NPMCanonicalPackage    = "@etherscan/cli"
+	NPMTransitionalPackage = "@etherscan-npm/cli"
+
+	NPMInstallPackageEnv = "ETHERSCAN_NPM_PACKAGE"
+	NPMWrapperPIDEnv     = "ETHERSCAN_NPM_WRAPPER_PID"
 )
 
 var runtimeGOOS = runtime.GOOS
@@ -32,10 +38,10 @@ func (s *Service) DetectMethod() string {
 		if resolved, resolveErr := filepath.EvalSymlinks(executable); resolveErr == nil {
 			executable = resolved
 		}
-		normalized := strings.ToLower(filepath.ToSlash(executable))
-		if strings.Contains(normalized, "/node_modules/@etherscan/cli/") {
+		if _, ok := npmPackageFromExecutable(executable); ok {
 			return MethodNPM
 		}
+		normalized := strings.ToLower(filepath.ToSlash(executable))
 		if strings.Contains(normalized, "/cellar/etherscan/") || strings.Contains(normalized, "/linuxbrew/.linuxbrew/cellar/etherscan/") {
 			return MethodHomebrew
 		}
@@ -45,6 +51,44 @@ func (s *Service) DetectMethod() string {
 
 func ValidMethod(method string) bool {
 	return method == MethodHomebrew || method == MethodNPM || method == MethodScript
+}
+
+func NPMPackageName() (string, error) {
+	name := strings.TrimSpace(os.Getenv(NPMInstallPackageEnv))
+	if name != "" {
+		return validateNPMPackageName(name)
+	}
+
+	executable, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("locate current executable to identify npm package: %w", err)
+	}
+	if resolved, resolveErr := filepath.EvalSymlinks(executable); resolveErr == nil {
+		executable = resolved
+	}
+	if name, ok := npmPackageFromExecutable(executable); ok {
+		return name, nil
+	}
+	return "", fmt.Errorf("cannot identify npm package from executable %q; reinstall with npm before uninstalling", executable)
+}
+
+func validateNPMPackageName(name string) (string, error) {
+	switch name {
+	case NPMCanonicalPackage, NPMTransitionalPackage:
+		return name, nil
+	default:
+		return "", fmt.Errorf("untrusted npm package name %q", name)
+	}
+}
+
+func npmPackageFromExecutable(executable string) (string, bool) {
+	normalized := strings.ToLower(filepath.ToSlash(executable))
+	for _, candidate := range []string{NPMCanonicalPackage, NPMTransitionalPackage} {
+		if strings.Contains(normalized, "/node_modules/"+candidate+"/") {
+			return candidate, true
+		}
+	}
+	return "", false
 }
 
 // Upgrade installs a stable release. The returned background value is true on

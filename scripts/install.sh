@@ -7,6 +7,9 @@ version=${ETHERSCAN_VERSION:-}
 install_dir=${ETHERSCAN_INSTALL_DIR:-"$HOME/.local/bin"}
 download_base=${ETHERSCAN_INSTALL_TEST_DOWNLOAD_BASE_URL:-}
 update_path=1
+uninstall=0
+marker_name=.etherscan-cli-path-added
+marker_content=etherscan-cli:path-added:v1
 
 usage() {
     cat <<'EOF'
@@ -18,6 +21,7 @@ Options:
   --version VERSION         Install a specific version (for example, v1.1.0).
   --install-dir DIRECTORY   Install into DIRECTORY (default: ~/.local/bin).
   --no-path-update          Do not update the shell profile.
+  --uninstall               Remove the CLI and saved configuration.
   -h, --help                Show this help.
 EOF
 }
@@ -43,6 +47,10 @@ while [ "$#" -gt 0 ]; do
             update_path=0
             shift
             ;;
+        --uninstall)
+            uninstall=1
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -55,6 +63,124 @@ done
 
 if printf '%s' "$install_dir" | LC_ALL=C grep '[[:cntrl:]]' >/dev/null 2>&1; then
     die "the installation directory cannot contain control characters"
+fi
+
+config_dir() {
+    if [ -n "${XDG_CONFIG_HOME:-}" ]; then
+        printf '%s\n' "$XDG_CONFIG_HOME/etherscan"
+    else
+        printf '%s\n' "$HOME/.etherscan"
+    fi
+}
+
+profile_has_block() {
+    profile=$1
+    target=$2
+    [ -f "$profile" ] && [ ! -L "$profile" ] || return 1
+    awk -v target="$target" '
+        previous == "# Etherscan CLI" && $0 == target { found = 1; exit }
+        { previous = $0 }
+        END { exit found ? 0 : 1 }
+    ' "$profile"
+}
+
+remove_profile_block() {
+    profile=$1
+    target=$2
+    profile_has_block "$profile" "$target" || return 0
+    tmp=$(mktemp "${profile}.etherscan-uninstall.XXXXXX") || die "could not create a profile temporary file"
+    if ! cp -p "$profile" "$tmp"; then
+        rm -f "$tmp"
+        die "could not preserve permissions for $profile"
+    fi
+    if ! awk -v target="$target" '
+        {
+            if (pending) {
+                if ($0 == target) { pending = 0; next }
+                print "# Etherscan CLI"
+                pending = 0
+            }
+            if ($0 == "# Etherscan CLI") { pending = 1; next }
+            print
+        }
+        END { if (pending) print "# Etherscan CLI" }
+    ' "$profile" >"$tmp"; then
+        rm -f "$tmp"
+        die "could not update $profile"
+    fi
+    mv -f "$tmp" "$profile"
+    printf 'Removed the PATH entry from %s\n' "$profile"
+}
+
+directory_empty_except_marker() {
+    directory=$1
+    marker=$2
+    [ -d "$directory" ] || return 0
+    for entry in "$directory"/.[!.]* "$directory"/..?* "$directory"/*; do
+        [ -e "$entry" ] || [ -L "$entry" ] || continue
+        [ "$entry" = "$marker" ] && continue
+        return 1
+    done
+    return 0
+}
+
+if [ "$uninstall" -eq 1 ]; then
+    binary="$install_dir/etherscan"
+    marker="$install_dir/$marker_name"
+    marker_valid=0
+    if [ -f "$marker" ] && [ ! -L "$marker" ] && [ "$(cat "$marker")" = "$marker_content" ]; then
+        marker_valid=1
+    fi
+
+    escaped_install_dir=$(printf '%s' "$install_dir" | sed 's/[\\"$`]/\\&/g')
+    posix_path_line="export PATH=\"$escaped_install_dir:\$PATH\""
+    fish_path_line="fish_add_path \"$escaped_install_dir\""
+    legacy_provenance=0
+    for candidate in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
+        if profile_has_block "$candidate" "$posix_path_line"; then
+            legacy_provenance=1
+        fi
+    done
+    if profile_has_block "$HOME/.config/fish/config.fish" "$fish_path_line"; then
+        legacy_provenance=1
+    fi
+
+    removed=0
+    if [ -e "$binary" ] || [ -L "$binary" ]; then
+        rm -f "$binary"
+        printf 'Removed %s\n' "$binary"
+        removed=1
+    fi
+
+    if [ "$update_path" -eq 1 ] && { [ "$marker_valid" -eq 1 ] || [ "$legacy_provenance" -eq 1 ]; } && directory_empty_except_marker "$install_dir" "$marker"; then
+        for candidate in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
+            remove_profile_block "$candidate" "$posix_path_line"
+        done
+        remove_profile_block "$HOME/.config/fish/config.fish" "$fish_path_line"
+        if [ "$marker_valid" -eq 1 ]; then
+            rm -f "$marker"
+        fi
+        rmdir "$install_dir" 2>/dev/null || true
+        removed=1
+    elif [ "$update_path" -eq 1 ] && [ -d "$install_dir" ]; then
+        printf 'Left %s on PATH because ownership was not proven or the directory is shared.\n' "$install_dir"
+    fi
+
+    etherscan_config=$(config_dir)
+    if [ -e "$etherscan_config" ] || [ -L "$etherscan_config" ]; then
+        rm -rf "$etherscan_config"
+        printf 'Removed %s\n' "$etherscan_config"
+        removed=1
+    fi
+    if [ "$removed" -eq 1 ]; then
+        printf 'Etherscan CLI uninstalled.\n'
+    else
+        printf 'Nothing to remove.\n'
+    fi
+    if [ -n "${ETHERSCAN_API_KEY:-}" ]; then
+        printf 'note: ETHERSCAN_API_KEY remains set; unset it in your shell.\n' >&2
+    fi
+    exit 0
 fi
 
 fetch_stdout() {
@@ -195,6 +321,7 @@ if [ "$update_path" -eq 1 ]; then
                     printf '%s\n' "$path_line"
                 } >>"$profile"
                 path_updated=1
+                printf '%s' "$marker_content" >"$install_dir/$marker_name"
             fi
             ;;
     esac

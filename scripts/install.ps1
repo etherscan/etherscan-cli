@@ -4,7 +4,8 @@ param(
     [string]$InstallDir = $env:ETHERSCAN_INSTALL_DIR,
     [switch]$NoPathUpdate,
     [int]$WaitForProcessId = 0,
-    [switch]$CleanupScript
+    [switch]$CleanupScript,
+    [switch]$Uninstall
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +13,8 @@ $ProgressPreference = "SilentlyContinue"
 
 $Repository = "etherscan/etherscan-cli"
 $DownloadBaseUrl = $env:ETHERSCAN_INSTALL_TEST_DOWNLOAD_BASE_URL
+$InstallMarkerName = ".etherscan-cli-path-added"
+$InstallMarkerContent = "etherscan-cli:path-added:v1"
 
 function Get-EtherscanArchitecture {
     $architecture = $env:PROCESSOR_ARCHITEW6432
@@ -118,12 +121,13 @@ function Add-EtherscanToUserPath {
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
     $entries = @($userPath -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     $alreadyPresent = $entries | Where-Object {
+        $entry = $_
         try {
-            $expandedEntry = [Environment]::ExpandEnvironmentVariables($_)
+            $expandedEntry = [Environment]::ExpandEnvironmentVariables($entry)
             [IO.Path]::GetFullPath($expandedEntry).TrimEnd('\').Equals($fullDirectory, [StringComparison]::OrdinalIgnoreCase)
         }
         catch {
-            $_.TrimEnd('\').Equals($fullDirectory, [StringComparison]::OrdinalIgnoreCase)
+            $entry.TrimEnd('\').Equals($fullDirectory, [StringComparison]::OrdinalIgnoreCase)
         }
     }
 
@@ -136,12 +140,53 @@ function Add-EtherscanToUserPath {
         }
         [Environment]::SetEnvironmentVariable("Path", $newUserPath, "User")
         Write-Host "Added $fullDirectory to your user PATH."
+        $pathAdded = $true
+    }
+    else {
+        $pathAdded = $false
     }
 
     $processEntries = @($env:Path -split ';')
     if (-not ($processEntries | Where-Object { $_.TrimEnd('\').Equals($fullDirectory, [StringComparison]::OrdinalIgnoreCase) })) {
         $env:Path = "$env:Path;$fullDirectory"
     }
+    return $pathAdded
+}
+
+function Remove-EtherscanFromUserPath {
+    param([string]$Directory)
+
+    $fullDirectory = [IO.Path]::GetFullPath($Directory).TrimEnd('\')
+    $entries = @([Environment]::GetEnvironmentVariable("Path", "User") -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $kept = @($entries | Where-Object {
+        $entry = $_
+        try {
+            $expandedEntry = [Environment]::ExpandEnvironmentVariables($entry)
+            -not [IO.Path]::GetFullPath($expandedEntry).TrimEnd('\').Equals($fullDirectory, [StringComparison]::OrdinalIgnoreCase)
+        }
+        catch {
+            -not $entry.TrimEnd('\').Equals($fullDirectory, [StringComparison]::OrdinalIgnoreCase)
+        }
+    })
+    if ($kept.Count -ne $entries.Count) {
+        [Environment]::SetEnvironmentVariable("Path", ($kept -join ';'), "User")
+        Write-Host "Removed $fullDirectory from your user PATH."
+    }
+}
+
+function Test-EtherscanInstallMarker {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+    $item = Get-Item -LiteralPath $Path -Force
+    if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }
+    return (Get-Content -LiteralPath $Path -Raw) -eq $InstallMarkerContent
+}
+
+function Get-EtherscanConfigDirectory {
+    if (-not [string]::IsNullOrWhiteSpace($env:XDG_CONFIG_HOME)) {
+        return Join-Path $env:XDG_CONFIG_HOME "etherscan"
+    }
+    return Join-Path $env:USERPROFILE ".etherscan"
 }
 
 if ($env:OS -ne "Windows_NT") {
@@ -160,6 +205,58 @@ if ($InstallDir.IndexOfAny([char[]]"`r`n") -ge 0) {
 }
 if ($WaitForProcessId -gt 0) {
     Wait-Process -Id $WaitForProcessId -ErrorAction SilentlyContinue
+}
+
+if ($Uninstall) {
+    try {
+        $targetExecutable = Join-Path $InstallDir "etherscan.exe"
+        $marker = Join-Path $InstallDir $InstallMarkerName
+        $validMarker = Test-EtherscanInstallMarker -Path $marker
+        $localAppData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
+        $defaultInstallDir = Join-Path $localAppData "Programs\Etherscan\bin"
+        $legacyDefault = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\').Equals(
+            [IO.Path]::GetFullPath($defaultInstallDir).TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase)
+        $removed = $false
+
+        if (Test-Path -LiteralPath $targetExecutable) {
+            Remove-Item -LiteralPath $targetExecutable -Force
+            Write-Host "Removed $targetExecutable"
+            $removed = $true
+        }
+
+        $otherEntries = @()
+        if (Test-Path -LiteralPath $InstallDir -PathType Container) {
+            $otherEntries = @(Get-ChildItem -LiteralPath $InstallDir -Force | Where-Object {
+                -not ($validMarker -and $_.FullName -eq $marker)
+            } | Select-Object -First 1)
+        }
+        if (-not $NoPathUpdate -and ($validMarker -or $legacyDefault) -and $otherEntries.Count -eq 0) {
+            Remove-EtherscanFromUserPath -Directory $InstallDir
+            if ($validMarker) { Remove-Item -LiteralPath $marker -Force }
+            Remove-Item -LiteralPath $InstallDir -Force -ErrorAction SilentlyContinue
+            $removed = $true
+        }
+        elseif (-not $NoPathUpdate -and (Test-Path -LiteralPath $InstallDir)) {
+            Write-Host "Left $InstallDir on PATH because ownership was not proven or the directory is shared."
+        }
+
+        $configDirectory = Get-EtherscanConfigDirectory
+        if (Test-Path -LiteralPath $configDirectory) {
+            Remove-Item -LiteralPath $configDirectory -Recurse -Force
+            Write-Host "Removed $configDirectory"
+            $removed = $true
+        }
+        if ($removed) { Write-Host "Etherscan CLI uninstalled." } else { Write-Host "Nothing to remove." }
+        if (-not [string]::IsNullOrWhiteSpace($env:ETHERSCAN_API_KEY)) {
+            Write-Warning "ETHERSCAN_API_KEY remains set; unset it in your shell."
+        }
+    }
+    finally {
+        if ($CleanupScript -and -not [string]::IsNullOrWhiteSpace($PSCommandPath)) {
+            Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+    return
 }
 
 $resolved = Resolve-EtherscanVersion -RequestedVersion $Version
@@ -240,7 +337,10 @@ try {
     }
 
     if (-not $NoPathUpdate) {
-        Add-EtherscanToUserPath -Directory $InstallDir
+        $pathAdded = Add-EtherscanToUserPath -Directory $InstallDir
+        if ($pathAdded) {
+            Set-Content -LiteralPath (Join-Path $InstallDir $InstallMarkerName) -Value $InstallMarkerContent -NoNewline
+        }
     }
 
     Write-Host ""

@@ -20,6 +20,8 @@ $archiveName = "etherscan_${version}_windows_$goArchitecture.zip"
 $archivePath = Join-Path $fixtureDirectory $archiveName
 $checksumPath = Join-Path $fixtureDirectory "checksums.txt"
 $previousDownloadBaseUrl = $env:ETHERSCAN_INSTALL_TEST_DOWNLOAD_BASE_URL
+$previousUserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$previousXdgConfigHome = $env:XDG_CONFIG_HOME
 
 function Write-Fixture {
     param([string]$Content)
@@ -77,9 +79,68 @@ try {
         throw "installer accepted an insecure download URL"
     }
 
+    # Uninstall with installer provenance removes a dedicated PATH entry and config.
+    $env:ETHERSCAN_INSTALL_TEST_DOWNLOAD_BASE_URL = $fixtureDirectory
+    Write-Fixture -Content "third"
+    $configHome = Join-Path $tempDirectory "config-home"
+    $env:XDG_CONFIG_HOME = $configHome
+    $configDirectory = Join-Path $configHome "etherscan"
+    $dedicatedDirectory = Join-Path $tempDirectory "dedicated dir"
+    & $installer -Version $version -InstallDir $dedicatedDirectory
+    New-Item -ItemType Directory -Path $configDirectory -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $configDirectory "config.toml") -Value 'api_key = "test"'
+    if (-not (Test-Path -LiteralPath (Join-Path $dedicatedDirectory ".etherscan-cli-path-added"))) {
+        throw "installer did not record PATH provenance"
+    }
+    & $installer -InstallDir $dedicatedDirectory -Uninstall
+    if (Test-Path -LiteralPath $dedicatedDirectory) {
+        throw "provenanced uninstall left its dedicated directory"
+    }
+    if (Test-Path -LiteralPath $configDirectory) {
+        throw "uninstall left configuration behind"
+    }
+    if (([Environment]::GetEnvironmentVariable("Path", "User")) -like "*$dedicatedDirectory*") {
+        throw "provenanced uninstall left its PATH entry"
+    }
+
+    # A shared directory keeps unrelated files, its provenance marker, and PATH entry.
+    $sharedDirectory = Join-Path $tempDirectory "shared dir"
+    & $installer -Version $version -InstallDir $sharedDirectory
+    Set-Content -LiteralPath (Join-Path $sharedDirectory "other.exe") -Value "keep" -NoNewline
+    & $installer -InstallDir $sharedDirectory -Uninstall
+    if (Test-Path -LiteralPath (Join-Path $sharedDirectory "etherscan.exe")) {
+        throw "shared uninstall left the CLI binary"
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $sharedDirectory "other.exe"))) {
+        throw "shared uninstall removed an unrelated file"
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $sharedDirectory ".etherscan-cli-path-added"))) {
+        throw "shared uninstall discarded PATH provenance"
+    }
+    if (([Environment]::GetEnvironmentVariable("Path", "User")) -notlike "*$sharedDirectory*") {
+        throw "shared uninstall removed a PATH entry used by another tool"
+    }
+
+    # An unprovenanced custom directory is retained even when empty.
+    $customDirectory = Join-Path $tempDirectory "custom dir"
+    & $installer -Version $version -InstallDir $customDirectory -NoPathUpdate
+    [Environment]::SetEnvironmentVariable("Path", "$previousUserPath;$customDirectory", "User")
+    & $installer -InstallDir $customDirectory -Uninstall
+    if (-not (Test-Path -LiteralPath $customDirectory)) {
+        throw "uninstall removed an unprovenanced custom directory"
+    }
+    if (([Environment]::GetEnvironmentVariable("Path", "User")) -notlike "*$customDirectory*") {
+        throw "uninstall removed an unprovenanced PATH entry"
+    }
+
+    # Repeated uninstall is a no-op.
+    & $installer -InstallDir $dedicatedDirectory -Uninstall
+
     Write-Host "PowerShell installer tests passed."
 }
 finally {
     $env:ETHERSCAN_INSTALL_TEST_DOWNLOAD_BASE_URL = $previousDownloadBaseUrl
+    $env:XDG_CONFIG_HOME = $previousXdgConfigHome
+    [Environment]::SetEnvironmentVariable("Path", $previousUserPath, "User")
     Remove-Item -LiteralPath $tempDirectory -Recurse -Force -ErrorAction SilentlyContinue
 }

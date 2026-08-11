@@ -40,6 +40,7 @@ type Service struct {
 	GOOS             string
 	LookPath         func(string) (string, error)
 	InstallerURL     func(string, string) string
+	RemoveFile       func(string) error
 	runCommand       commandRunner
 }
 
@@ -52,8 +53,16 @@ func NewService() *Service {
 		GOOS:             runtimeGOOS,
 		LookPath:         execLookPath,
 		InstallerURL:     defaultInstallerURL,
+		RemoveFile:       os.Remove,
 		runCommand:       defaultCommandRunner,
 	}
+}
+
+func (s *Service) removeFile(path string) error {
+	if s.RemoveFile != nil {
+		return s.RemoveFile(path)
+	}
+	return os.Remove(path)
 }
 
 func (s *Service) Check(ctx context.Context, current string, force bool) (Result, error) {
