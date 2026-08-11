@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -149,6 +150,9 @@ func endpointCommand(state *globalState, spec EndpointSpec) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			for name, value := range spec.FixedParams {
+				params[name] = value
+			}
 			if err := populateFileParam(state, params); err != nil {
 				return err
 			}
@@ -159,8 +163,8 @@ func endpointCommand(state *globalState, spec EndpointSpec) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if spec.MainnetOnly && !chains.IsMainnetID(rt.chain.ID) {
-				return fmt.Errorf("%s/%s is only supported on Ethereum mainnet", spec.Module, spec.Action)
+			if err := validateEndpointChain(spec, rt.chain); err != nil {
+				return err
 			}
 			if spec.Sensitive && !state.yes {
 				if err := confirm(cmd.Context(), fmt.Sprintf("Submit %s/%s?", spec.Module, spec.Action), cmd.InOrStdin(), cmd.ErrOrStderr()); err != nil {
@@ -181,9 +185,16 @@ func endpointCommand(state *globalState, spec EndpointSpec) *cobra.Command {
 		},
 	}
 	for _, param := range spec.Params {
-		cmd.Flags().String(flagName(param.Name), "", param.Usage)
+		value := new(string)
+		canonical := flagName(param.Name)
+		cmd.Flags().StringVar(value, canonical, "", param.Usage)
+		if legacy := legacyFlagName(param.Name); legacy != "" && legacy != canonical {
+			cmd.Flags().StringVar(value, legacy, "", param.Usage)
+			_ = cmd.Flags().MarkDeprecated(legacy, "use --"+canonical+" instead")
+			_ = cmd.Flags().MarkHidden(legacy)
+		}
 	}
-	if spec.Action == "verifysourcecode" {
+	if spec.AcceptsFile {
 		cmd.Flags().StringVar(&state.file, "file", "", "read source/payload content from file")
 	}
 	return cmd
@@ -831,11 +842,34 @@ func tuiValidate(rt *resolvedRuntime, index map[string]EndpointSpec) func(module
 		if !ok {
 			return fmt.Errorf("unknown endpoint %s/%s", module, action)
 		}
-		if spec.MainnetOnly && !chains.IsMainnetID(rt.chain.ID) {
-			return fmt.Errorf("%s/%s is only supported on Ethereum mainnet", spec.Module, spec.Action)
+		if err := validateEndpointChain(spec, rt.chain); err != nil {
+			return err
 		}
 		return validateParams(spec, params)
 	}
+}
+
+func validateEndpointChain(spec EndpointSpec, chain chains.Chain) error {
+	if spec.MainnetOnly && !chains.IsMainnetID(chain.ID) {
+		return fmt.Errorf("%s/%s is only supported on Ethereum mainnet", spec.Module, spec.Action)
+	}
+	if len(spec.AllowedChainIDs) == 0 {
+		return nil
+	}
+	for _, id := range spec.AllowedChainIDs {
+		if chain.ID == id {
+			return nil
+		}
+	}
+	names := make([]string, len(spec.AllowedChainIDs))
+	for i, id := range spec.AllowedChainIDs {
+		if allowed, err := chains.Resolve(id); err == nil {
+			names[i] = allowed.DisplayName
+		} else {
+			names[i] = id
+		}
+	}
+	return fmt.Errorf("etherscan contract %s is only supported on %s", strings.Fields(spec.Use)[0], strings.Join(names, " and "))
 }
 
 // tuiExec builds the explorer's executor. It re-runs tuiValidate before issuing
@@ -1210,6 +1244,25 @@ func validateParams(spec EndpointSpec, params map[string]string) error {
 			if err := client.ValidateHex(p.Name, v); err != nil {
 				return err
 			}
+		case KindZeroOne:
+			if v != "" && v != "0" && v != "1" {
+				return fmt.Errorf("%s must be 0 or 1", p.Name)
+			}
+		case KindConstructorArgs:
+			normalized, err := normalizeConstructorArguments(v)
+			if err != nil {
+				return err
+			}
+			params[p.Name] = normalized
+		case KindLicense:
+			if err := validateLicenseType(v); err != nil {
+				return err
+			}
+		}
+	}
+	if spec.Module == "contract" && spec.Action == "verifysourcecode" {
+		if err := validateSourceVerification(spec, params); err != nil {
+			return err
 		}
 	}
 	if len(spec.RequireOneOf) > 0 {
@@ -1284,15 +1337,84 @@ func validateAdvancedFilter(params map[string]string) error {
 }
 
 func populateFileParam(state *globalState, params map[string]string) error {
-	if state.file == "" {
+	if state.file == "" || params["sourceCode"] != "" {
 		return nil
 	}
-	data, err := os.ReadFile(state.file)
+	file, err := os.Open(state.file)
 	if err != nil {
 		return err
 	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxVerificationSourceBytes+1))
+	if err != nil {
+		return err
+	}
+	if len(data) > maxVerificationSourceBytes {
+		return fmt.Errorf("verification source exceeds the %d-byte limit", maxVerificationSourceBytes)
+	}
 	if params["sourceCode"] == "" {
 		params["sourceCode"] = string(data)
+	}
+	return nil
+}
+
+const (
+	maxVerificationSourceBytes  = 3_000_000
+	maxConstructorArgumentChars = 250_000
+)
+
+func normalizeConstructorArguments(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	if strings.HasPrefix(value, "0x") || strings.HasPrefix(value, "0X") {
+		value = value[2:]
+	}
+	if len(value) > maxConstructorArgumentChars {
+		return "", fmt.Errorf("constructorArguments exceeds the %d-character limit", maxConstructorArgumentChars)
+	}
+	if len(value)%2 != 0 {
+		return "", errors.New("constructorArguments must contain an even number of hexadecimal characters")
+	}
+	if _, err := hex.DecodeString(value); err != nil {
+		return "", errors.New("constructorArguments must be hexadecimal without a 0x prefix")
+	}
+	return value, nil
+}
+
+func validateLicenseType(value string) error {
+	if value == "" {
+		return nil
+	}
+	license, err := strconv.Atoi(value)
+	if err != nil || license < 1 || license > 14 {
+		return errors.New("licenseType must be an integer from 1 to 14")
+	}
+	return nil
+}
+
+func validateSourceVerification(spec EndpointSpec, params map[string]string) error {
+	if len(params["sourceCode"]) > maxVerificationSourceBytes {
+		return fmt.Errorf("verification source exceeds the %d-byte limit", maxVerificationSourceBytes)
+	}
+	format := params["codeformat"]
+	allowed := false
+	for _, candidate := range spec.AllowedCodeFormats {
+		if format == candidate {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return fmt.Errorf("unsupported codeformat %q for etherscan contract %s", format, strings.Fields(spec.Use)[0])
+	}
+	switch format {
+	case "solidity-single-file", "vyper-json":
+		if params["optimizationUsed"] == "" {
+			return fmt.Errorf("missing required optimizationUsed for %s", format)
+		}
+	case "solidity-standard-json-input", "stylus":
 	}
 	return nil
 }
@@ -1335,8 +1457,28 @@ func firstNonEmpty(values ...string) string {
 }
 
 func flagName(name string) string {
-	replacer := strings.NewReplacer("_", "-", "sourceCode", "source-code", "fromBlock", "from-block", "toBlock", "to-block", "gasPrice", "gas-price")
+	replacer := strings.NewReplacer(
+		"_", "-",
+		"sourceCode", "source-code",
+		"fromBlock", "from-block",
+		"toBlock", "to-block",
+		"gasPrice", "gas-price",
+		"optimizationUsed", "optimization-used",
+		"constructorArguments", "constructor-arguments",
+		"evmVersion", "evm-version",
+		"licenseType", "license-type",
+		"zksolcVersion", "zksolc-version",
+	)
 	return replacer.Replace(name)
+}
+
+func legacyFlagName(name string) string {
+	switch name {
+	case "optimizationUsed", "constructorArguments", "evmVersion", "licenseType", "zksolcVersion":
+		return name
+	default:
+		return ""
+	}
 }
 
 func atoi(value string) int {

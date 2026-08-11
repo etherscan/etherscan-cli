@@ -167,7 +167,7 @@ Run `etherscan tui` to open the full-screen endpoint explorer:
 etherscan tui
 ```
 
-The explorer can be opened before authentication and asks you to validate and save a key when you submit an API-backed endpoint. Running `etherscan` with no command prints the Quick Start guide.
+The explorer can be opened before authentication and asks you to validate and save a key when you submit an API-backed endpoint. It is read-only; source and proxy verification submissions remain available through the traditional commands. Running `etherscan` with no command prints the Quick Start guide.
 
 ## Practical workflows
 
@@ -191,6 +191,24 @@ etherscan account txlist 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --all --max-
 etherscan contract getabi 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
 etherscan contract getsourcecode 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
 ```
+
+### Verify a contract
+
+Use `--file` for Solidity, Abstract zkSync-stack, or Vyper source payloads. Stylus verification takes a public Git repository URL instead.
+
+```sh
+# Solidity standard JSON
+etherscan contract verify 0xYourContract --file input.json --codeformat solidity-standard-json-input --contractname contracts/Verified.sol:Verified --compilerversion v0.8.24+commit.e11b9ed9
+
+# Abstract uses the zkSync compiler stack (Abstract Mainnet and Sepolia only)
+etherscan --chain abstract contract verify-zksync 0xYourContract --file input.json --codeformat solidity-standard-json-input --contractname contracts/Verified.sol:Verified --compilerversion v0.8.24+commit.e11b9ed9 --zksolc-version v1.5.7
+
+# Vyper JSON verification, and Stylus repository verification (Arbitrum One and Sepolia only)
+etherscan contract verify-vyper 0xYourContract --file input.json --contractname contracts/Verified.vy:Verified --compilerversion vyper:0.4.0 --optimization-used 0
+etherscan --chain arbitrum contract verify-stylus 0xYourContract --source-code https://github.com/example/project --contractname project --compilerversion stylus:0.5.3 --license-type 3
+```
+
+Constructor arguments may be supplied as bare ABI-encoded hex or with a `0x` prefix; the CLI sends the documented bare form. Verification source files are limited to 3,000,000 bytes. Run any verification command with `--help` for its exact options.
 
 ### Switch chains
 
@@ -288,9 +306,12 @@ etherscan contract verify --help
 | `etherscan contract getabi` | Get a verified contract's ABI | [getabi](https://docs.etherscan.io/api-reference/endpoint/getabi.md) |
 | `etherscan contract getsourcecode` | Get verified source code and contract metadata | [getsourcecode](https://docs.etherscan.io/api-reference/endpoint/getsourcecode.md) |
 | `etherscan contract getcontractcreation` | Get creator and creation transaction data for contracts | [getcontractcreation](https://docs.etherscan.io/api-reference/endpoint/getcontractcreation.md) |
-| `etherscan contract verify` | Submit contract source code for verification | [verifysourcecode](https://docs.etherscan.io/api-reference/endpoint/verifysourcecode.md) |
-| `etherscan contract verify-status` | Check a source verification submission | [checkverifystatus](https://docs.etherscan.io/api-reference/endpoint/checkverifystatus.md) |
+| `etherscan contract verify` | Submit Solidity source code for verification | [verifysourcecode](https://docs.etherscan.io/api-reference/endpoint/verifysourcecode.md) |
+| `etherscan contract verify-zksync` | Submit zkSync-stack source code on Abstract | [verifyzksyncsourcecode](https://docs.etherscan.io/api-reference/endpoint/verifyzksyncsourcecode.md) |
+| `etherscan contract verify-vyper` | Submit Vyper source code for verification | [verifyvyper](https://docs.etherscan.io/api-reference/endpoint/verifyvyper.md) |
+| `etherscan contract verify-stylus` | Submit Stylus source code for verification | [verifystylus](https://docs.etherscan.io/api-reference/endpoint/verifystylus.md) |
 | `etherscan contract verify-proxy` | Submit a proxy contract for verification | [verifyproxycontract](https://docs.etherscan.io/api-reference/endpoint/verifyproxycontract.md) |
+| `etherscan contract verify-status` | Check a source verification submission | [checkverifystatus](https://docs.etherscan.io/api-reference/endpoint/checkverifystatus.md) |
 | `etherscan contract check-proxy` | Check a proxy verification submission | [checkproxyverification](https://docs.etherscan.io/api-reference/endpoint/checkproxyverification.md) |
 
 ### Transaction

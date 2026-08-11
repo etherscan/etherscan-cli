@@ -310,13 +310,20 @@ func TestTuiEndpointsExcludeWriteActions(t *testing.T) {
 		t.Fatal("expected some browsable endpoints")
 	}
 	// Write/sensitive actions must never appear in the read-only explorer.
+	contractCount := 0
 	for _, e := range list {
+		if e.Module == "contract" {
+			contractCount++
+		}
 		if e.Module == "contract" && (e.Action == "verifysourcecode" || e.Action == "verifyproxycontract") {
 			t.Fatalf("write action leaked into TUI: %s/%s", e.Module, e.Action)
 		}
 		if e.Module == "proxy" && e.Action == "eth_sendRawTransaction" {
 			t.Fatalf("write action leaked into TUI: %s/%s", e.Module, e.Action)
 		}
+	}
+	if contractCount != 5 {
+		t.Fatalf("read-only TUI contract endpoint count = %d, want 5", contractCount)
 	}
 	if _, ok := index["proxy/eth_sendRawTransaction"]; ok {
 		t.Fatal("excluded action should not be in the executor index")

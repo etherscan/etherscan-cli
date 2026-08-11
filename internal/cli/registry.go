@@ -3,14 +3,17 @@ package cli
 type ParamKind string
 
 const (
-	KindString    ParamKind = "string"
-	KindAddress   ParamKind = "address"
-	KindAddresses ParamKind = "addresses"
-	KindTxHash    ParamKind = "txhash"
-	KindUint      ParamKind = "uint"
-	KindDate      ParamKind = "date"
-	KindSort      ParamKind = "sort"
-	KindHex       ParamKind = "hex"
+	KindString          ParamKind = "string"
+	KindAddress         ParamKind = "address"
+	KindAddresses       ParamKind = "addresses"
+	KindTxHash          ParamKind = "txhash"
+	KindUint            ParamKind = "uint"
+	KindDate            ParamKind = "date"
+	KindSort            ParamKind = "sort"
+	KindHex             ParamKind = "hex"
+	KindZeroOne         ParamKind = "zero-one"
+	KindConstructorArgs ParamKind = "constructor-args"
+	KindLicense         ParamKind = "license"
 )
 
 type ParamSpec struct {
@@ -23,17 +26,21 @@ type ParamSpec struct {
 }
 
 type EndpointSpec struct {
-	Module      string
-	Action      string
-	Use         string
-	Short       string
-	Params      []ParamSpec
-	Columns     []string
-	Paginated   bool
-	Post        bool
-	Sensitive   bool
-	NoRetry     bool
-	MainnetOnly bool
+	Module             string
+	Action             string
+	Use                string
+	Short              string
+	Params             []ParamSpec
+	Columns            []string
+	Paginated          bool
+	Post               bool
+	Sensitive          bool
+	NoRetry            bool
+	MainnetOnly        bool
+	AcceptsFile        bool
+	FixedParams        map[string]string
+	AllowedChainIDs    []string
+	AllowedCodeFormats []string
 	// AdvancedFilter enables the optional from/to/fromto_opr params and their
 	// cross-field validation (see validateAdvancedFilter).
 	AdvancedFilter bool
@@ -70,9 +77,12 @@ func endpoints() []EndpointSpec {
 		{Module: "contract", Action: "getabi", Use: "getabi <address>", Short: "Get contract ABI", Params: []ParamSpec{argAddress("address")}},
 		{Module: "contract", Action: "getsourcecode", Use: "getsourcecode <address>", Short: "Get contract source metadata", Params: []ParamSpec{argAddress("address")}},
 		{Module: "contract", Action: "getcontractcreation", Use: "getcontractcreation <addr1,...>", Short: "Get contract creation data", Params: []ParamSpec{argAddresses("contractaddresses", 5)}},
-		{Module: "contract", Action: "verifysourcecode", Use: "verify <address>", Short: "Submit source verification", Params: []ParamSpec{argAddress("contractaddress"), req("sourceCode", "source code or --file content", KindString), req("codeformat", "code format", KindString), req("contractname", "contract name", KindString), req("compilerversion", "compiler version", KindString), p("optimizationUsed", "optimization flag", KindString), p("runs", "optimizer runs", KindUint), p("constructorArguments", "constructor args", KindHex), p("evmVersion", "EVM version", KindString), p("licenseType", "license type", KindString)}, Post: true, Sensitive: true, NoRetry: true},
-		{Module: "contract", Action: "checkverifystatus", Use: "verify-status <guid>", Short: "Check verification status", Params: []ParamSpec{arg("guid", "verification GUID", KindString)}},
+		{Module: "contract", Action: "verifysourcecode", Use: "verify <address>", Short: "Submit Solidity source verification", Params: []ParamSpec{argAddress("contractaddress"), req("sourceCode", "source code or --file content", KindString), req("codeformat", "source code format", KindString), req("contractname", "contract name", KindString), req("compilerversion", "compiler version", KindString), p("optimizationUsed", "optimization flag: 0 or 1", KindZeroOne), p("runs", "optimizer runs", KindUint), p("constructorArguments", "ABI-encoded constructor arguments", KindConstructorArgs), p("evmVersion", "EVM version", KindString), p("licenseType", "license type (1-14)", KindLicense)}, Post: true, Sensitive: true, NoRetry: true, AcceptsFile: true, AllowedCodeFormats: []string{"solidity-single-file", "solidity-standard-json-input", "vyper-json", "stylus"}},
+		{Module: "contract", Action: "verifysourcecode", Use: "verify-zksync <address>", Short: "Submit Abstract zkSync-stack source verification", Params: []ParamSpec{argAddress("contractaddress"), req("sourceCode", "source code or --file content", KindString), req("codeformat", "solidity-single-file or solidity-standard-json-input", KindString), req("contractname", "contract name", KindString), req("compilerversion", "compiler version", KindString), req("zksolcVersion", "zkSolc compiler version", KindString), p("optimizationUsed", "optimization flag: 0 or 1", KindZeroOne), p("constructorArguments", "ABI-encoded constructor arguments", KindConstructorArgs)}, Post: true, Sensitive: true, NoRetry: true, AcceptsFile: true, AllowedChainIDs: []string{"2741", "11124"}, AllowedCodeFormats: []string{"solidity-single-file", "solidity-standard-json-input"}},
+		{Module: "contract", Action: "verifysourcecode", Use: "verify-vyper <address>", Short: "Submit Vyper source verification", Params: []ParamSpec{argAddress("contractaddress"), req("sourceCode", "source code or --file content", KindString), req("contractname", "contract name", KindString), req("compilerversion", "compiler version", KindString), req("optimizationUsed", "optimization flag: 0 or 1", KindZeroOne), p("constructorArguments", "ABI-encoded constructor arguments", KindConstructorArgs)}, Post: true, Sensitive: true, NoRetry: true, AcceptsFile: true, FixedParams: map[string]string{"codeformat": "vyper-json"}, AllowedCodeFormats: []string{"vyper-json"}},
+		{Module: "contract", Action: "verifysourcecode", Use: "verify-stylus <address>", Short: "Submit Stylus source verification", Params: []ParamSpec{argAddress("contractaddress"), req("sourceCode", "public Git repository URL", KindString), req("contractname", "contract name", KindString), req("compilerversion", "Stylus compiler version", KindString), p("licenseType", "license type (1-14)", KindLicense)}, Post: true, Sensitive: true, NoRetry: true, FixedParams: map[string]string{"codeformat": "stylus"}, AllowedChainIDs: []string{"42161", "421614"}, AllowedCodeFormats: []string{"stylus"}},
 		{Module: "contract", Action: "verifyproxycontract", Use: "verify-proxy <address>", Short: "Submit proxy verification", Params: []ParamSpec{argAddress("address"), p("expectedimplementation", "implementation address", KindAddress)}, Post: true, Sensitive: true, NoRetry: true},
+		{Module: "contract", Action: "checkverifystatus", Use: "verify-status <guid>", Short: "Check verification status", Params: []ParamSpec{arg("guid", "verification GUID", KindString)}},
 		{Module: "contract", Action: "checkproxyverification", Use: "check-proxy <guid>", Short: "Check proxy verification", Params: []ParamSpec{arg("guid", "verification GUID", KindString)}},
 	}
 	transaction := []EndpointSpec{
