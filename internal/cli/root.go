@@ -124,13 +124,40 @@ func addEndpointCommands(root *cobra.Command, state *globalState) {
 			root.AddCommand(endpointCommand(state, spec))
 			continue
 		}
-		group, ok := groups[spec.Module]
+		name := spec.CommandGroup()
+		group, ok := groups[name]
 		if !ok {
-			group = &cobra.Command{Use: spec.Module, Short: "Etherscan " + spec.Module + " commands"}
-			groups[spec.Module] = group
+			group = &cobra.Command{
+				Use:   name,
+				Short: groupShort(name),
+				Long:  groupLong(name),
+				Args:  groupArgs(name),
+				// Runnable so cobra reaches Args validation. A non-runnable parent
+				// returns flag.ErrHelp first, which ExecuteC turns into "print help,
+				// exit 0" — see groupArgs.
+				RunE: func(cmd *cobra.Command, args []string) error { return cmd.Help() },
+			}
+			groups[name] = group
 			root.AddCommand(group)
 		}
 		group.AddCommand(endpointCommand(state, spec))
+	}
+}
+
+// groupArgs rejects leftover arguments on a parent group. Cobra only reports an
+// unknown command at the root; under a group it prints the parent's help to
+// stdout and exits 0, so a script still calling a command that moved or was
+// renamed would succeed with help text in its output stream instead of failing.
+func groupArgs(group string) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return nil
+		}
+		msg := fmt.Sprintf("unknown command %q for %q", args[0], cmd.CommandPath())
+		if hint := groupHint(group); hint != "" {
+			msg += "; " + hint
+		}
+		return errors.New(msg)
 	}
 }
 
@@ -869,7 +896,7 @@ func validateEndpointChain(spec EndpointSpec, chain chains.Chain) error {
 			names[i] = id
 		}
 	}
-	return fmt.Errorf("etherscan contract %s is only supported on %s", strings.Fields(spec.Use)[0], strings.Join(names, " and "))
+	return fmt.Errorf("etherscan %s %s is only supported on %s", spec.CommandGroup(), strings.Fields(spec.Use)[0], strings.Join(names, " and "))
 }
 
 // tuiExec builds the explorer's executor. It re-runs tuiValidate before issuing
@@ -896,23 +923,38 @@ func tuiExec(rt *resolvedRuntime, index map[string]EndpointSpec) tui.Exec {
 	}
 }
 
-// tuiModuleOrder is the Etherscan docs order (https://docs.etherscan.io/introduction).
-// The TUI sidebar follows it so users can cross-reference the docs; the CLI command
-// tree is unaffected.
+// tuiModuleOrder is the Etherscan docs order (https://docs.etherscan.io/introduction),
+// with "verification" inserted for the CLI's own contractverification group, which has
+// no docs module of its own. The TUI sidebar follows this order so users can
+// cross-reference the docs; the CLI command tree is unaffected.
 var tuiModuleOrder = []string{
-	"account", "block", "contract", "gastracker", "proxy", "logs",
-	"stats", "transaction", "token", "nametag", "usage",
+	"account", "block", "contract", "verification", "gastracker", "proxy",
+	"logs", "stats", "transaction", "token", "nametag", "usage",
 }
 
-// tuiModuleGroup maps wire modules to the docs nav group they appear under when
-// the two differ. The TUI sidebar shows the docs group name; requests and result
-// headers keep the wire module.
-var tuiModuleGroup = map[string]string{
-	"getapilimit": "usage",
+// tuiGroupLabel maps a CLI command group to its sidebar label where the two differ.
+// The TUI sidebar shows this label; requests and result headers keep the wire module.
+// Two reasons a label diverges: getapilimit belongs to the docs "usage" nav group,
+// and contractverification is too long for the sidebar — labels must fit
+// tui.SidebarLabelMaxLen or lipgloss wraps them and breaks the panel layout
+// (TestTuiSidebarLabelsFitPanel enforces this).
+var tuiGroupLabel = map[string]string{
+	"getapilimit":          "usage",
+	"contractverification": "verification",
 }
 
-// tuiActionOrder is the docs sidebar order WITHIN each module (scraped from the
-// rendered nav on docs.etherscan.io, 2026-07-11). Actions whose docs page lives in
+// tuiSidebarGroup returns the sidebar label for a spec: the CLI group's label when
+// one is mapped, else the wire module.
+func tuiSidebarGroup(spec EndpointSpec) string {
+	if label, ok := tuiGroupLabel[spec.CommandGroup()]; ok {
+		return label
+	}
+	return spec.Module
+}
+
+// tuiActionOrder is the docs sidebar order WITHIN each sidebar group — usually a
+// wire module, but "verification" is a CLI group label (see tuiGroupLabel). Scraped
+// from the rendered nav on docs.etherscan.io, 2026-07-11. Actions whose docs page lives in
 // a different docs group than their API module (token balances, L2 transfers,
 // daily-series stats) are appended after the module's own group, in their group's
 // order. Actions not listed here (e.g. undocumented stats series) sink to the end
@@ -928,9 +970,14 @@ var tuiActionOrder = map[string][]string{
 		// L2 deposits/withdrawals docs group
 		"txnbridge", "getdeposittxs", "getwithdrawaltxs",
 	},
-	"block":      {"getblockreward", "getblocktxnscount", "getblockcountdown", "getblocknobytime"},
-	"contract":   {"getabi", "getsourcecode", "getcontractcreation", "verifysourcecode", "checkverifystatus", "verifyproxycontract", "checkproxyverification"},
-	"gastracker": {"gasestimate", "gasoracle"},
+	"block":    {"getblockreward", "getblocktxnscount", "getblockcountdown", "getblocknobytime"},
+	"contract": {"getabi", "getsourcecode", "getcontractcreation"},
+	// Keyed by sidebar label, not CLI group. Only checkverifystatus and
+	// checkproxyverification are browsable; verifysourcecode and
+	// verifyproxycontract are Post/Sensitive and filtered out before this
+	// ordering applies, but are listed so the intended order is recorded.
+	"verification": {"verifysourcecode", "checkverifystatus", "verifyproxycontract", "checkproxyverification"},
+	"gastracker":   {"gasestimate", "gasoracle"},
 	"proxy": {
 		"eth_blockNumber", "eth_getBlockByNumber", "eth_getUncleByBlockNumberAndIndex",
 		"eth_getBlockTransactionCountByNumber", "eth_getTransactionByHash",
@@ -983,7 +1030,7 @@ func tuiEndpoints() ([]tui.Endpoint, map[string]EndpointSpec) {
 			Params:    params,
 			Columns:   spec.Columns,
 			Paginated: spec.Paginated,
-			Group:     tuiModuleGroup[spec.Module],
+			Group:     tuiSidebarGroup(spec),
 		})
 		index[spec.Module+"/"+spec.Action] = spec
 	}
@@ -997,7 +1044,7 @@ func tuiEndpoints() ([]tui.Endpoint, map[string]EndpointSpec) {
 		Desc:    "List all supported Etherscan chains",
 		Columns: []string{"chainname", "chainid", "blockexplorer", "status"},
 		Bare:    true,
-		Group:   tuiModuleGroup["getapilimit"],
+		Group:   tuiGroupLabel["getapilimit"],
 	})
 	groupOf := func(e tui.Endpoint) string {
 		if e.Group != "" {
@@ -1407,7 +1454,7 @@ func validateSourceVerification(spec EndpointSpec, params map[string]string) err
 		}
 	}
 	if !allowed {
-		return fmt.Errorf("unsupported codeformat %q for etherscan contract %s", format, strings.Fields(spec.Use)[0])
+		return fmt.Errorf("unsupported codeformat %q for etherscan %s %s", format, spec.CommandGroup(), strings.Fields(spec.Use)[0])
 	}
 	switch format {
 	case "solidity-single-file", "vyper-json":

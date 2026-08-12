@@ -322,8 +322,34 @@ func TestTuiEndpointsExcludeWriteActions(t *testing.T) {
 			t.Fatalf("write action leaked into TUI: %s/%s", e.Module, e.Action)
 		}
 	}
+	// Counted by wire module, which the CLI group split does not change: 3 data
+	// reads plus the 2 verification polls.
 	if contractCount != 5 {
 		t.Fatalf("read-only TUI contract endpoint count = %d, want 5", contractCount)
+	}
+	// The two polls sit in the verification sidebar group, mirroring the CLI split
+	// (under the shorter label the panel can fit), but keep the contract wire
+	// module — it drives the executor lookup and the result header.
+	polls := map[string]bool{"checkverifystatus": true, "checkproxyverification": true}
+	seenPolls := 0
+	for _, e := range list {
+		switch {
+		case polls[e.Action]:
+			seenPolls++
+			if tuiGroup(e) != "verification" {
+				t.Fatalf("poll %s sidebar group = %q, want verification", e.Action, tuiGroup(e))
+			}
+			if e.Module != "contract" {
+				t.Fatalf("poll %s must keep wire module contract, got %q", e.Action, e.Module)
+			}
+		case e.Module == "contract":
+			if tuiGroup(e) != "contract" {
+				t.Fatalf("contract read %s sidebar group = %q, want contract", e.Action, tuiGroup(e))
+			}
+		}
+	}
+	if seenPolls != 2 {
+		t.Fatalf("browsable verification polls = %d, want 2", seenPolls)
 	}
 	if _, ok := index["proxy/eth_sendRawTransaction"]; ok {
 		t.Fatal("excluded action should not be in the executor index")
@@ -348,5 +374,50 @@ func TestTuiEndpointsExcludeWriteActions(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("account/balance not present in TUI endpoints")
+	}
+}
+
+// TestTuiSidebarLabelsFitPanel guards the MODULES panel layout. The panel is a
+// fixed width and lipgloss wraps rather than truncates, so a label longer than
+// tui.SidebarLabelMaxLen splits across two rows — which breaks the
+// one-row-per-item windowing and pushes the view past its height budget, trimming
+// the header off the top. The CLI group "contractverification" is itself too long,
+// which is why tuiGroupLabel shortens it to "verification".
+func TestTuiSidebarLabelsFitPanel(t *testing.T) {
+	list, _ := tuiEndpoints()
+	seen := map[string]bool{}
+	for _, e := range list {
+		label := tuiGroup(e)
+		if seen[label] {
+			continue
+		}
+		seen[label] = true
+		if len(label) > tui.SidebarLabelMaxLen {
+			t.Errorf("sidebar label %q is %d chars, exceeds the %d that fit the panel", label, len(label), tui.SidebarLabelMaxLen)
+		}
+	}
+	if !seen["verification"] {
+		t.Fatal("expected a verification sidebar group")
+	}
+	// Every label must be ordered, or rank() sinks it to the bottom of the sidebar.
+	for label := range seen {
+		if !slices.Contains(tuiModuleOrder, label) {
+			t.Errorf("sidebar label %q is missing from tuiModuleOrder and would sink to the end", label)
+		}
+	}
+}
+
+// TestTuiGroupLabelsCoverCLIGroups: every CLI command group either shares its name
+// with a sidebar label that fits the panel, or has an entry in tuiGroupLabel. Without
+// this, adding a group with a long name silently breaks the TUI layout again.
+func TestTuiGroupLabelsCoverCLIGroups(t *testing.T) {
+	for _, spec := range endpoints() {
+		group := spec.CommandGroup()
+		if _, mapped := tuiGroupLabel[group]; mapped {
+			continue
+		}
+		if len(group) > tui.SidebarLabelMaxLen {
+			t.Errorf("CLI group %q is %d chars and has no tuiGroupLabel entry; it would wrap in the sidebar", group, len(group))
+		}
 	}
 }

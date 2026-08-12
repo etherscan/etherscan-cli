@@ -26,7 +26,12 @@ type ParamSpec struct {
 }
 
 type EndpointSpec struct {
-	Module             string
+	Module string
+	// Group files this endpoint under a CLI command group that differs from the
+	// wire Module — the contract verification commands group under
+	// "contractverification" while still sending module=contract. It also labels
+	// the TUI sidebar. Empty means group by Module. Never sent on the wire.
+	Group              string
 	Action             string
 	Use                string
 	Short              string
@@ -49,6 +54,53 @@ type EndpointSpec struct {
 	// rather than one always-required param.
 	RequireOneOf []string
 }
+
+// CommandGroup returns the CLI command group: the Group override when set, else
+// the wire Module.
+func (s EndpointSpec) CommandGroup() string {
+	if s.Group != "" {
+		return s.Group
+	}
+	return s.Module
+}
+
+// groupMeta is the help text for a parent command group. short overrides the
+// default "Etherscan <group> commands" wording; long is cobra's help body; hint
+// is appended to the "unknown command" error so a caller who used a path that
+// moved is told where it went.
+type groupMeta struct {
+	short string
+	long  string
+	hint  string
+}
+
+// groupMetaOverride carries per-group help text. Only groups that need something
+// other than the default wording appear here.
+var groupMetaOverride = map[string]groupMeta{
+	"contract": {
+		short: "Etherscan contract data commands",
+		long: "Etherscan contract data commands.\n\n" +
+			"Contract verification and its status checks live under \"etherscan contractverification\".",
+		hint: "contract verification commands moved to \"etherscan contractverification\"",
+	},
+	"contractverification": {short: "Etherscan contract verification commands"},
+}
+
+// groupShort returns the parent command's Short description for a CLI group.
+func groupShort(group string) string {
+	if meta, ok := groupMetaOverride[group]; ok && meta.short != "" {
+		return meta.short
+	}
+	return "Etherscan " + group + " commands"
+}
+
+// groupLong returns the parent command's Long description, or "" to let cobra
+// fall back to Short.
+func groupLong(group string) string { return groupMetaOverride[group].long }
+
+// groupHint returns the extra guidance appended to an unknown-subcommand error,
+// or "" when the group has none.
+func groupHint(group string) string { return groupMetaOverride[group].hint }
 
 func endpoints() []EndpointSpec {
 	commonList := []ParamSpec{p("startblock", "start block", KindUint), p("endblock", "end block", KindUint), p("page", "page number", KindUint), p("offset", "page size", KindUint), p("sort", "asc or desc (default asc)", KindSort)}
@@ -77,13 +129,13 @@ func endpoints() []EndpointSpec {
 		{Module: "contract", Action: "getabi", Use: "getabi <address>", Short: "Get contract ABI", Params: []ParamSpec{argAddress("address")}},
 		{Module: "contract", Action: "getsourcecode", Use: "getsourcecode <address>", Short: "Get contract source metadata", Params: []ParamSpec{argAddress("address")}},
 		{Module: "contract", Action: "getcontractcreation", Use: "getcontractcreation <addr1,...>", Short: "Get contract creation data", Params: []ParamSpec{argAddresses("contractaddresses", 5)}},
-		{Module: "contract", Action: "verifysourcecode", Use: "verify <address>", Short: "Submit Solidity source verification", Params: []ParamSpec{argAddress("contractaddress"), req("sourceCode", "source code or --file content", KindString), req("codeformat", "source code format", KindString), req("contractname", "contract name", KindString), req("compilerversion", "compiler version", KindString), p("optimizationUsed", "optimization flag: 0 or 1", KindZeroOne), p("runs", "optimizer runs", KindUint), p("constructorArguments", "ABI-encoded constructor arguments", KindConstructorArgs), p("evmVersion", "EVM version", KindString), p("licenseType", "license type (1-14)", KindLicense)}, Post: true, Sensitive: true, NoRetry: true, AcceptsFile: true, AllowedCodeFormats: []string{"solidity-single-file", "solidity-standard-json-input", "vyper-json", "stylus"}},
-		{Module: "contract", Action: "verifysourcecode", Use: "verify-zksync <address>", Short: "Submit Abstract zkSync-stack source verification", Params: []ParamSpec{argAddress("contractaddress"), req("sourceCode", "source code or --file content", KindString), req("codeformat", "solidity-single-file or solidity-standard-json-input", KindString), req("contractname", "contract name", KindString), req("compilerversion", "compiler version", KindString), req("zksolcVersion", "zkSolc compiler version", KindString), p("optimizationUsed", "optimization flag: 0 or 1", KindZeroOne), p("constructorArguments", "ABI-encoded constructor arguments", KindConstructorArgs)}, Post: true, Sensitive: true, NoRetry: true, AcceptsFile: true, AllowedChainIDs: []string{"2741", "11124"}, AllowedCodeFormats: []string{"solidity-single-file", "solidity-standard-json-input"}},
-		{Module: "contract", Action: "verifysourcecode", Use: "verify-vyper <address>", Short: "Submit Vyper source verification", Params: []ParamSpec{argAddress("contractaddress"), req("sourceCode", "source code or --file content", KindString), req("contractname", "contract name", KindString), req("compilerversion", "compiler version", KindString), req("optimizationUsed", "optimization flag: 0 or 1", KindZeroOne), p("constructorArguments", "ABI-encoded constructor arguments", KindConstructorArgs)}, Post: true, Sensitive: true, NoRetry: true, AcceptsFile: true, FixedParams: map[string]string{"codeformat": "vyper-json"}, AllowedCodeFormats: []string{"vyper-json"}},
-		{Module: "contract", Action: "verifysourcecode", Use: "verify-stylus <address>", Short: "Submit Stylus source verification", Params: []ParamSpec{argAddress("contractaddress"), req("sourceCode", "public Git repository URL", KindString), req("contractname", "contract name", KindString), req("compilerversion", "Stylus compiler version", KindString), p("licenseType", "license type (1-14)", KindLicense)}, Post: true, Sensitive: true, NoRetry: true, FixedParams: map[string]string{"codeformat": "stylus"}, AllowedChainIDs: []string{"42161", "421614"}, AllowedCodeFormats: []string{"stylus"}},
-		{Module: "contract", Action: "verifyproxycontract", Use: "verify-proxy <address>", Short: "Submit proxy verification", Params: []ParamSpec{argAddress("address"), p("expectedimplementation", "implementation address", KindAddress)}, Post: true, Sensitive: true, NoRetry: true},
-		{Module: "contract", Action: "checkverifystatus", Use: "verify-status <guid>", Short: "Check verification status", Params: []ParamSpec{arg("guid", "verification GUID", KindString)}},
-		{Module: "contract", Action: "checkproxyverification", Use: "check-proxy <guid>", Short: "Check proxy verification", Params: []ParamSpec{arg("guid", "verification GUID", KindString)}},
+		{Module: "contract", Group: "contractverification", Action: "verifysourcecode", Use: "verify <address>", Short: "Submit Solidity source verification", Params: []ParamSpec{argAddress("contractaddress"), req("sourceCode", "source code or --file content", KindString), req("codeformat", "source code format", KindString), req("contractname", "contract name", KindString), req("compilerversion", "compiler version", KindString), p("optimizationUsed", "optimization flag: 0 or 1", KindZeroOne), p("runs", "optimizer runs", KindUint), p("constructorArguments", "ABI-encoded constructor arguments", KindConstructorArgs), p("evmVersion", "EVM version", KindString), p("licenseType", "license type (1-14)", KindLicense)}, Post: true, Sensitive: true, NoRetry: true, AcceptsFile: true, AllowedCodeFormats: []string{"solidity-single-file", "solidity-standard-json-input", "vyper-json", "stylus"}},
+		{Module: "contract", Group: "contractverification", Action: "verifysourcecode", Use: "verify-zksync <address>", Short: "Submit Abstract zkSync-stack source verification", Params: []ParamSpec{argAddress("contractaddress"), req("sourceCode", "source code or --file content", KindString), req("codeformat", "solidity-single-file or solidity-standard-json-input", KindString), req("contractname", "contract name", KindString), req("compilerversion", "compiler version", KindString), req("zksolcVersion", "zkSolc compiler version", KindString), p("optimizationUsed", "optimization flag: 0 or 1", KindZeroOne), p("constructorArguments", "ABI-encoded constructor arguments", KindConstructorArgs)}, Post: true, Sensitive: true, NoRetry: true, AcceptsFile: true, AllowedChainIDs: []string{"2741", "11124"}, AllowedCodeFormats: []string{"solidity-single-file", "solidity-standard-json-input"}},
+		{Module: "contract", Group: "contractverification", Action: "verifysourcecode", Use: "verify-vyper <address>", Short: "Submit Vyper source verification", Params: []ParamSpec{argAddress("contractaddress"), req("sourceCode", "source code or --file content", KindString), req("contractname", "contract name", KindString), req("compilerversion", "compiler version", KindString), req("optimizationUsed", "optimization flag: 0 or 1", KindZeroOne), p("constructorArguments", "ABI-encoded constructor arguments", KindConstructorArgs)}, Post: true, Sensitive: true, NoRetry: true, AcceptsFile: true, FixedParams: map[string]string{"codeformat": "vyper-json"}, AllowedCodeFormats: []string{"vyper-json"}},
+		{Module: "contract", Group: "contractverification", Action: "verifysourcecode", Use: "verify-stylus <address>", Short: "Submit Stylus source verification", Params: []ParamSpec{argAddress("contractaddress"), req("sourceCode", "public Git repository URL", KindString), req("contractname", "contract name", KindString), req("compilerversion", "Stylus compiler version", KindString), p("licenseType", "license type (1-14)", KindLicense)}, Post: true, Sensitive: true, NoRetry: true, FixedParams: map[string]string{"codeformat": "stylus"}, AllowedChainIDs: []string{"42161", "421614"}, AllowedCodeFormats: []string{"stylus"}},
+		{Module: "contract", Group: "contractverification", Action: "verifyproxycontract", Use: "verify-proxy <address>", Short: "Submit proxy verification", Params: []ParamSpec{argAddress("address"), p("expectedimplementation", "implementation address", KindAddress)}, Post: true, Sensitive: true, NoRetry: true},
+		{Module: "contract", Group: "contractverification", Action: "checkverifystatus", Use: "check-status <guid>", Short: "Check verification status", Params: []ParamSpec{arg("guid", "verification GUID", KindString)}},
+		{Module: "contract", Group: "contractverification", Action: "checkproxyverification", Use: "check-proxy <guid>", Short: "Check proxy verification", Params: []ParamSpec{arg("guid", "verification GUID", KindString)}},
 	}
 	transaction := []EndpointSpec{
 		{Module: "transaction", Action: "getstatus", Use: "status <txhash>", Short: "Get transaction execution status", Params: []ParamSpec{arg("txhash", "transaction hash", KindTxHash)}},

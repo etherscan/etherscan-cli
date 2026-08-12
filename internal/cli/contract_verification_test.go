@@ -7,13 +7,17 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/etherscan/etherscan-cli/internal/chains"
 )
 
-const testContractAddress = "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413"
+const (
+	testContractAddress       = "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413"
+	testImplementationAddress = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+)
 
 func TestContractVerificationRegistry(t *testing.T) {
 	want := map[string]struct {
@@ -31,8 +35,13 @@ func TestContractVerificationRegistry(t *testing.T) {
 		if !ok {
 			continue
 		}
+		// Module stays "contract" (the wire module) while the CLI files the
+		// command under the contractverification group.
 		if spec.Module != "contract" || spec.Action != "verifysourcecode" || !spec.Post || !spec.Sensitive || !spec.NoRetry {
 			t.Fatalf("%s has incorrect request metadata: %+v", name, spec)
+		}
+		if spec.Group != "contractverification" {
+			t.Fatalf("%s CLI group = %q, want contractverification", name, spec.Group)
 		}
 		if spec.FixedParams["codeformat"] != expected.format || spec.AcceptsFile != expected.file {
 			t.Fatalf("%s format/file metadata = %q/%v, want %q/%v", name, spec.FixedParams["codeformat"], spec.AcceptsFile, expected.format, expected.file)
@@ -98,7 +107,7 @@ func TestVerificationVariantsSendExpectedForm(t *testing.T) {
 			defer server.Close()
 
 			root := newRootCommand(BuildInfo{}, &fakeUpdateManager{})
-			args := []string{"--api-key", "TESTKEY", "--base-url", server.URL, "--chain", test.chain, "--yes", "contract", test.command, testContractAddress}
+			args := []string{"--api-key", "TESTKEY", "--base-url", server.URL, "--chain", test.chain, "--yes", "contractverification", test.command, testContractAddress}
 			root.SetArgs(append(args, test.flags...))
 			if err := root.Execute(); err != nil {
 				t.Fatal(err)
@@ -154,13 +163,19 @@ func TestVerifyZkSyncRejectsOtherChainBeforeSubmission(t *testing.T) {
 	root := newRootCommand(BuildInfo{}, &fakeUpdateManager{})
 	root.SetArgs([]string{
 		"--api-key", "TESTKEY", "--base-url", server.URL, "--chain", "ethereum",
-		"contract", "verify-zksync", testContractAddress,
+		"contractverification", "verify-zksync", testContractAddress,
 		"--source-code", `{}`, "--codeformat", "solidity-standard-json-input",
 		"--contractname", "C.sol:C", "--compilerversion", "v0.8.24", "--zksolc-version", "v1.5.7",
 	})
 	err := root.Execute()
 	if err == nil || !strings.Contains(err.Error(), "Abstract") {
 		t.Fatalf("error = %v, want Abstract restriction", err)
+	}
+	// The message must name the command's real path. It used to hardcode
+	// "etherscan contract", which survived the group split silently because the
+	// assertion above only matches the chain name.
+	if want := "etherscan contractverification verify-zksync"; !strings.Contains(err.Error(), want) {
+		t.Errorf("error = %q, want it to name %q", err, want)
 	}
 	if requests != 0 {
 		t.Fatalf("restricted request reached server %d times", requests)
@@ -206,13 +221,16 @@ func TestVerifyStylusRejectsOtherChainBeforeSubmission(t *testing.T) {
 	root := newRootCommand(BuildInfo{}, &fakeUpdateManager{})
 	root.SetArgs([]string{
 		"--api-key", "TESTKEY", "--base-url", server.URL, "--chain", "ethereum",
-		"contract", "verify-stylus", testContractAddress,
+		"contractverification", "verify-stylus", testContractAddress,
 		"--source-code", "https://github.com/example/stylus-contract",
 		"--contractname", "C", "--compilerversion", "stylus:0.5.1",
 	})
 	err := root.Execute()
 	if err == nil || !strings.Contains(err.Error(), "Arbitrum") {
 		t.Fatalf("error = %v, want Arbitrum restriction", err)
+	}
+	if want := "etherscan contractverification verify-stylus"; !strings.Contains(err.Error(), want) {
+		t.Errorf("error = %q, want it to name %q", err, want)
 	}
 	if requests != 0 {
 		t.Fatalf("restricted request reached server %d times", requests)
@@ -227,11 +245,13 @@ func TestVerificationValidation(t *testing.T) {
 	}{
 		{name: "single file needs optimization", params: map[string]string{"sourceCode": "x", "codeformat": "solidity-single-file"}, wantErr: "optimizationUsed"},
 		{name: "standard json does not", params: map[string]string{"sourceCode": "{}", "codeformat": "solidity-standard-json-input"}},
-		{name: "unsupported format", params: map[string]string{"sourceCode": "x", "codeformat": "unknown"}, wantErr: "unsupported codeformat"},
+		// Asserts the whole message, not just the prefix: the spec below carries a
+		// real Module/Group, so a regression in the command path renders here.
+		{name: "unsupported format", params: map[string]string{"sourceCode": "x", "codeformat": "unknown"}, wantErr: `unsupported codeformat "unknown" for etherscan contractverification verify`},
 		{name: "oversized source", params: map[string]string{"sourceCode": strings.Repeat("x", maxVerificationSourceBytes+1), "codeformat": "stylus"}, wantErr: "exceeds"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			spec := EndpointSpec{Use: "verify <address>", AllowedCodeFormats: []string{"solidity-single-file", "solidity-standard-json-input", "vyper-json", "stylus"}}
+			spec := EndpointSpec{Module: "contract", Group: "contractverification", Use: "verify <address>", AllowedCodeFormats: []string{"solidity-single-file", "solidity-standard-json-input", "vyper-json", "stylus"}}
 			err := validateSourceVerification(spec, test.params)
 			if test.wantErr == "" && err != nil {
 				t.Fatal(err)
@@ -304,7 +324,7 @@ func TestVerificationFileLimit(t *testing.T) {
 
 func TestVerificationLegacyFlagAliases(t *testing.T) {
 	root := newRootCommand(BuildInfo{}, &fakeUpdateManager{})
-	cmd, _, err := root.Find([]string{"contract", "verify"})
+	cmd, _, err := root.Find([]string{"contractverification", "verify"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,5 +347,207 @@ func TestVerificationLegacyFlagAliases(t *testing.T) {
 		if got, err := cmd.Flags().GetString(canonical); err != nil || got != "1" {
 			t.Errorf("--%s did not bind --%s: %q, %v", legacy, canonical, got, err)
 		}
+	}
+}
+
+// TestContractGroupSplit pins the command-tree split: contract is data retrieval
+// only, contractverification owns every submission and status poll, and the move
+// is CLI-only — all seven keep sending module=contract.
+func TestContractGroupSplit(t *testing.T) {
+	want := map[string][]string{
+		"contract": {"getabi", "getcontractcreation", "getsourcecode"},
+		"contractverification": {
+			"check-proxy", "check-status", "verify", "verify-proxy",
+			"verify-stylus", "verify-vyper", "verify-zksync",
+		},
+	}
+	root := newRootCommand(BuildInfo{}, &fakeUpdateManager{})
+	for group, expected := range want {
+		cmd, _, err := root.Find([]string{group})
+		if err != nil {
+			t.Fatalf("group %q not found: %v", group, err)
+		}
+		if cmd.Name() != group {
+			t.Fatalf("group %q resolved to %q", group, cmd.Name())
+		}
+		var got []string
+		for _, sub := range cmd.Commands() {
+			got = append(got, sub.Name())
+		}
+		sort.Strings(got)
+		if strings.Join(got, " ") != strings.Join(expected, " ") {
+			t.Fatalf("%s subcommands = %v, want %v", group, got, expected)
+		}
+	}
+
+	// The verification group is a CLI grouping only: the wire module must stay
+	// contract, or the requests break and the validation gate in
+	// validateParams (keyed on Module) silently stops firing.
+	moved := 0
+	for _, spec := range endpoints() {
+		if spec.Group != "contractverification" {
+			continue
+		}
+		moved++
+		if spec.Module != "contract" {
+			t.Fatalf("%s wire module = %q, want contract", strings.Fields(spec.Use)[0], spec.Module)
+		}
+	}
+	if moved != 7 {
+		t.Fatalf("contractverification spec count = %d, want 7", moved)
+	}
+}
+
+// TestProxyAndPollWireForms pins the exact requests for the three commands that
+// TestVerificationVariantsSendExpectedForm does not cover. Without these, the
+// action names and param names of verify-proxy, check-status and check-proxy are
+// unasserted, so a typo in any of them ships silently.
+func TestProxyAndPollWireForms(t *testing.T) {
+	const guid = "abcd1234"
+	for _, test := range []struct {
+		name       string
+		args       []string
+		post       bool
+		wantAction string
+		wantParams map[string]string
+	}{
+		{
+			name:       "verify-proxy",
+			args:       []string{"verify-proxy", testContractAddress, "--expectedimplementation", testImplementationAddress},
+			post:       true,
+			wantAction: "verifyproxycontract",
+			wantParams: map[string]string{"address": testContractAddress, "expectedimplementation": testImplementationAddress},
+		},
+		{
+			name:       "check-status",
+			args:       []string{"check-status", guid},
+			wantAction: "checkverifystatus",
+			wantParams: map[string]string{"guid": guid},
+		},
+		{
+			name:       "check-proxy",
+			args:       []string{"check-proxy", guid},
+			wantAction: "checkproxyverification",
+			wantParams: map[string]string{"guid": guid},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var got url.Values
+			var method string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				method = r.Method
+				if r.Method == http.MethodPost {
+					_ = r.ParseForm()
+					got = r.PostForm
+				} else {
+					got = r.URL.Query()
+				}
+				fmt.Fprint(w, `{"status":"1","message":"OK","result":"ok"}`)
+			}))
+			defer server.Close()
+
+			root := newRootCommand(BuildInfo{}, &fakeUpdateManager{})
+			args := []string{"--api-key", "TESTKEY", "--base-url", server.URL, "--yes", "contractverification"}
+			root.SetArgs(append(args, test.args...))
+			if err := root.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			wantMethod := http.MethodGet
+			if test.post {
+				wantMethod = http.MethodPost
+			}
+			if method != wantMethod {
+				t.Errorf("method = %s, want %s", method, wantMethod)
+			}
+			// The wire module stays "contract" even though the CLI group does not.
+			if got.Get("module") != "contract" || got.Get("action") != test.wantAction {
+				t.Fatalf("wire endpoint = %q/%q, want contract/%s", got.Get("module"), got.Get("action"), test.wantAction)
+			}
+			for name, want := range test.wantParams {
+				if value := got.Get(name); value != want {
+					t.Errorf("%s = %q, want %q", name, value, want)
+				}
+			}
+		})
+	}
+}
+
+// TestGroupRejectsUnknownSubcommand: cobra reports an unknown command only at the
+// root — under a group it prints help to stdout and exits 0, which would make a
+// script still calling a moved or renamed command succeed with help text in its
+// output. groupArgs turns that into a real error.
+func TestGroupRejectsUnknownSubcommand(t *testing.T) {
+	for _, test := range []struct{ name, group, sub, wantHint string }{
+		{name: "moved verify", group: "contract", sub: "verify", wantHint: "contractverification"},
+		{name: "renamed poll", group: "contract", sub: "verify-status", wantHint: "contractverification"},
+		{name: "plain unknown", group: "account", sub: "definitelynotacommand"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := newRootCommand(BuildInfo{}, &fakeUpdateManager{})
+			var stdout, stderr strings.Builder
+			root.SetOut(&stdout)
+			root.SetErr(&stderr)
+			root.SetArgs([]string{test.group, test.sub, "0xabc"})
+			err := root.Execute()
+			if err == nil {
+				t.Fatalf("expected an error, got nil (stdout: %q)", stdout.String())
+			}
+			if !strings.Contains(err.Error(), `unknown command "`+test.sub+`"`) {
+				t.Errorf("error = %q, want it to name the unknown command", err)
+			}
+			// Help must not be written to stdout on an error path.
+			if strings.Contains(stdout.String(), "Available Commands") {
+				t.Errorf("help leaked to stdout: %q", stdout.String())
+			}
+			if test.wantHint != "" && !strings.Contains(err.Error(), test.wantHint) {
+				t.Errorf("error = %q, want it to point at %q", err, test.wantHint)
+			}
+		})
+	}
+}
+
+// TestGroupWithNoArgsStillPrintsHelp: making the group commands runnable must not
+// break the bare "etherscan contract" invocation.
+func TestGroupWithNoArgsStillPrintsHelp(t *testing.T) {
+	root := newRootCommand(BuildInfo{}, &fakeUpdateManager{})
+	var stdout strings.Builder
+	root.SetOut(&stdout)
+	root.SetErr(&stdout)
+	root.SetArgs([]string{"contract"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Available Commands", "getabi", "contractverification"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("bare group help missing %q: %q", want, stdout.String())
+		}
+	}
+}
+
+// TestGroupShortDescriptions pins the parent-group help wording, including the
+// default fallback for groups with no override.
+func TestGroupShortDescriptions(t *testing.T) {
+	for group, want := range map[string]string{
+		"contract":             "Etherscan contract data commands",
+		"contractverification": "Etherscan contract verification commands",
+		"account":              "Etherscan account commands",
+	} {
+		if got := groupShort(group); got != want {
+			t.Errorf("groupShort(%q) = %q, want %q", group, got, want)
+		}
+	}
+}
+
+// TestContractHelpPointsAtVerificationGroup: cobra answers an unknown subcommand
+// under a group by printing that group's help, so "etherscan contract verify"
+// (the pre-split path) must land on text naming the new group.
+func TestContractHelpPointsAtVerificationGroup(t *testing.T) {
+	root := newRootCommand(BuildInfo{}, &fakeUpdateManager{})
+	cmd, _, err := root.Find([]string{"contract"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(cmd.Long, "contractverification") {
+		t.Fatalf("contract group help does not point at the verification group: %q", cmd.Long)
 	}
 }
