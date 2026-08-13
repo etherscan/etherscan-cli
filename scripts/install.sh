@@ -77,7 +77,8 @@ profile_has_block() {
     profile=$1
     target=$2
     [ -f "$profile" ] && [ ! -L "$profile" ] || return 1
-    awk -v target="$target" '
+    ETHERSCAN_PROFILE_TARGET=$target awk '
+        BEGIN { target = ENVIRON["ETHERSCAN_PROFILE_TARGET"] }
         previous == "# Etherscan CLI" && $0 == target { found = 1; exit }
         { previous = $0 }
         END { exit found ? 0 : 1 }
@@ -93,7 +94,8 @@ remove_profile_block() {
         rm -f "$tmp"
         die "could not preserve permissions for $profile"
     fi
-    if ! awk -v target="$target" '
+    if ! ETHERSCAN_PROFILE_TARGET=$target awk '
+        BEGIN { target = ENVIRON["ETHERSCAN_PROFILE_TARGET"] }
         {
             if (pending) {
                 if ($0 == target) { pending = 0; next }

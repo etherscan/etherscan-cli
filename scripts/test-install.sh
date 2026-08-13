@@ -105,6 +105,17 @@ HOME="$manual_home" XDG_CONFIG_HOME="$config_home" sh "$installer" --install-dir
 grep -Fx "$manual_line" "$manual_home/.profile" >/dev/null || { printf 'uninstall removed a hand-written PATH line\n' >&2; exit 1; }
 [ -d "$manual_dir" ] || { printf 'uninstall removed an unprovenanced directory\n' >&2; exit 1; }
 
+# Installer-owned profile entries round-trip paths containing a literal backslash.
+backslash_home="$temp_dir/backslash-home"
+backslash_config_home="$temp_dir/backslash-config-home"
+backslash_dir="$temp_dir/back\\slash dir"
+mkdir -p "$backslash_home" "$backslash_config_home/etherscan"
+HOME="$backslash_home" SHELL=/bin/sh sh "$installer" --version "$version" --install-dir "$backslash_dir" >/dev/null
+grep -Fx '# Etherscan CLI' "$backslash_home/.profile" >/dev/null || { printf 'backslash-path install did not add its profile marker\n' >&2; exit 1; }
+HOME="$backslash_home" XDG_CONFIG_HOME="$backslash_config_home" sh "$installer" --install-dir "$backslash_dir" --uninstall >/dev/null
+[ ! -e "$backslash_dir" ] || { printf 'backslash-path uninstall left its directory\n' >&2; exit 1; }
+grep -Fx '# Etherscan CLI' "$backslash_home/.profile" >/dev/null && { printf 'backslash-path uninstall left its profile block behind\n' >&2; exit 1; }
+
 # A shared directory retains unrelated files, PATH, and provenance.
 shared_dir="$temp_dir/shared dir"
 HOME="$uninstall_home" SHELL=/bin/sh sh "$installer" --version "$version" --install-dir "$shared_dir" >/dev/null
