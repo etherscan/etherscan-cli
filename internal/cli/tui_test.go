@@ -218,7 +218,8 @@ func TestTuiChainListEntry(t *testing.T) {
 
 func TestTuiChainsPreservesSupportedChainMetadata(t *testing.T) {
 	all := tuiChains()
-	if len(all) != 64 || all[0].DisplayName != "Ethereum Mainnet" || all[len(all)-1].DisplayName != "MegaETH Testnet" {
+	// Tracks the registry count, which excludes the deprecated Moonbeam family.
+	if len(all) != 61 || all[0].DisplayName != "Ethereum Mainnet" || all[len(all)-1].DisplayName != "MegaETH Testnet" {
 		t.Fatalf("TUI chains do not follow supported-chains order: count=%d first=%q last=%q", len(all), all[0].DisplayName, all[len(all)-1].DisplayName)
 	}
 	for _, chain := range all {

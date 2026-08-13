@@ -61,8 +61,10 @@ func TestRegistryNoDuplicatesAndResolvable(t *testing.T) {
 
 func TestRegistryMatchesSupportedChainsOrderAndTiers(t *testing.T) {
 	all := All()
-	if len(all) != 64 {
-		t.Fatalf("supported chain count = %d, want 64", len(all))
+	// 61 after dropping the deprecated Moonbeam family (1284, 1285, 1287). Update
+	// this alongside the registry whenever Etherscan adds or removes a chain.
+	if len(all) != 61 {
+		t.Fatalf("supported chain count = %d, want 61", len(all))
 	}
 	if all[0].DisplayName != "Ethereum Mainnet" || all[len(all)-1].DisplayName != "MegaETH Testnet" {
 		t.Fatalf("registry is not in supported-chains order: first=%q last=%q", all[0].DisplayName, all[len(all)-1].DisplayName)
