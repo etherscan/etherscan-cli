@@ -94,6 +94,30 @@ Ensure your Go binary directory (`GOBIN`, or `GOPATH/bin` by default) is on `PAT
 
 Download the archive for your operating system and architecture plus `checksums.txt` from [GitHub Releases](https://github.com/etherscan/etherscan-cli/releases/latest). Verify the archive's SHA-256 checksum, extract it, and place `etherscan` (or `etherscan.exe`) on your `PATH`.
 
+## Uninstall
+
+Run:
+
+```sh
+etherscan uninstall
+```
+
+The command shows the exact package-manager action or executable and configuration paths before asking for confirmation. Use `--yes` to skip the prompt. Homebrew and npm installations are removed through their owning package manager. Installer, Go, manual, and source builds remove only the exact running executable; custom directories and `PATH` entries are left alone unless the installer recorded that it added them and the directory contains no other files.
+
+The command never requests administrator privileges. If a manually copied binary is in a protected location, it leaves the saved configuration intact and prints the exact command needed to remove the binary. Manually created aliases or separate symlinks may also need to be removed by hand.
+
+The installer scripts can remove a script installation without downloading a release archive:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/etherscan/etherscan-cli/master/scripts/install.sh | sh -s -- --uninstall
+```
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/etherscan/etherscan-cli/master/scripts/install.ps1))) -Uninstall
+```
+
+Uninstall removes the saved configuration directory. If `ETHERSCAN_API_KEY` is set, unset it separately in the shell or environment where it is defined.
+
 ## Get started
 
 ### 1. Create an API key
@@ -143,7 +167,7 @@ Run `etherscan tui` to open the full-screen endpoint explorer:
 etherscan tui
 ```
 
-The explorer can be opened before authentication and asks you to validate and save a key when you submit an API-backed endpoint. Running `etherscan` with no command prints the Quick Start guide.
+The explorer can be opened before authentication and asks you to validate and save a key when you submit an API-backed endpoint. It is read-only; source and proxy verification submissions remain available through the traditional commands. Running `etherscan` with no command prints the Quick Start guide.
 
 ## Practical workflows
 
@@ -167,6 +191,33 @@ etherscan account txlist 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --all --max-
 etherscan contract getabi 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
 etherscan contract getsourcecode 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
 ```
+
+### Verify a contract
+
+Verification lives in its own command group, `etherscan contractverification`, so that `etherscan contract` stays purely for reading on-chain contract data. Both groups call the same `contract` API module.
+
+Use `--file` for Solidity, Abstract zkSync-stack, or Vyper source payloads. Stylus verification takes a public Git repository URL instead.
+
+```sh
+# Solidity standard JSON
+etherscan contractverification verify 0xYourContract --file input.json --codeformat solidity-standard-json-input --contractname contracts/Verified.sol:Verified --compilerversion v0.8.24+commit.e11b9ed9
+
+# Abstract uses the zkSync compiler stack (Abstract Mainnet and Sepolia only)
+etherscan --chain abstract contractverification verify-zksync 0xYourContract --file input.json --codeformat solidity-standard-json-input --contractname contracts/Verified.sol:Verified --compilerversion v0.8.24+commit.e11b9ed9 --zksolc-version v1.5.7
+
+# Vyper JSON verification, and Stylus repository verification (Arbitrum One and Sepolia only)
+etherscan contractverification verify-vyper 0xYourContract --file input.json --contractname contracts/Verified.vy:Verified --compilerversion vyper:0.4.0 --optimization-used 0
+etherscan --chain arbitrum contractverification verify-stylus 0xYourContract --source-code https://github.com/example/project --contractname project --compilerversion stylus:0.5.3 --license-type 3
+```
+
+Each submission returns a GUID. Poll it with `check-status` for source verification, or `check-proxy` for a proxy submission:
+
+```sh
+etherscan contractverification check-status <guid>
+etherscan contractverification check-proxy <guid>
+```
+
+Constructor arguments may be supplied as bare ABI-encoded hex or with a `0x` prefix; the CLI sends the documented bare form. Verification source files are limited to 3,000,000 bytes. Run any verification command with `--help` for its exact options.
 
 ### Switch chains
 
@@ -209,7 +260,7 @@ Every command includes built-in parameter and usage help:
 ```sh
 etherscan --help
 etherscan account txlist --help
-etherscan contract verify --help
+etherscan contractverification verify --help
 ```
 
 <details>
@@ -223,7 +274,7 @@ etherscan contract verify --help
 | `etherscan tui` | Launch the interactive explorer |
 | `etherscan login` | Validate and store an API key |
 | `etherscan logout` | Remove the stored API key |
-| `etherscan uninstall` | Remove all CLI configuration |
+| `etherscan uninstall` | Remove the CLI and saved configuration |
 | `etherscan update` | Update a Homebrew or installer-script installation |
 | `etherscan whoami` | Show the active chain and masked API key |
 | `etherscan config` | Get, list, or set CLI configuration |
@@ -264,10 +315,20 @@ etherscan contract verify --help
 | `etherscan contract getabi` | Get a verified contract's ABI | [getabi](https://docs.etherscan.io/api-reference/endpoint/getabi.md) |
 | `etherscan contract getsourcecode` | Get verified source code and contract metadata | [getsourcecode](https://docs.etherscan.io/api-reference/endpoint/getsourcecode.md) |
 | `etherscan contract getcontractcreation` | Get creator and creation transaction data for contracts | [getcontractcreation](https://docs.etherscan.io/api-reference/endpoint/getcontractcreation.md) |
-| `etherscan contract verify` | Submit contract source code for verification | [verifysourcecode](https://docs.etherscan.io/api-reference/endpoint/verifysourcecode.md) |
-| `etherscan contract verify-status` | Check a source verification submission | [checkverifystatus](https://docs.etherscan.io/api-reference/endpoint/checkverifystatus.md) |
-| `etherscan contract verify-proxy` | Submit a proxy contract for verification | [verifyproxycontract](https://docs.etherscan.io/api-reference/endpoint/verifyproxycontract.md) |
-| `etherscan contract check-proxy` | Check a proxy verification submission | [checkproxyverification](https://docs.etherscan.io/api-reference/endpoint/checkproxyverification.md) |
+
+### Contract verification
+
+Grouped separately from the contract data commands above. All of these call the `contract` API module.
+
+| Command | Description | API docs |
+| --- | --- | --- |
+| `etherscan contractverification verify` | Submit Solidity source code for verification | [verifysourcecode](https://docs.etherscan.io/api-reference/endpoint/verifysourcecode.md) |
+| `etherscan contractverification verify-zksync` | Submit zkSync-stack source code on Abstract | [verifyzksyncsourcecode](https://docs.etherscan.io/api-reference/endpoint/verifyzksyncsourcecode.md) |
+| `etherscan contractverification verify-vyper` | Submit Vyper source code for verification | [verifyvyper](https://docs.etherscan.io/api-reference/endpoint/verifyvyper.md) |
+| `etherscan contractverification verify-stylus` | Submit Stylus source code for verification | [verifystylus](https://docs.etherscan.io/api-reference/endpoint/verifystylus.md) |
+| `etherscan contractverification verify-proxy` | Submit a proxy contract for verification | [verifyproxycontract](https://docs.etherscan.io/api-reference/endpoint/verifyproxycontract.md) |
+| `etherscan contractverification check-status` | Check a source verification submission | [checkverifystatus](https://docs.etherscan.io/api-reference/endpoint/checkverifystatus.md) |
+| `etherscan contractverification check-proxy` | Check a proxy verification submission | [checkproxyverification](https://docs.etherscan.io/api-reference/endpoint/checkproxyverification.md) |
 
 ### Transaction
 

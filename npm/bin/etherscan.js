@@ -5,6 +5,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const packageInfo = require("../../package.json");
 
 const packageRoot = path.resolve(__dirname, "..", "..");
 const executable = path.join(
@@ -26,6 +27,8 @@ const result = spawnSync(executable, process.argv.slice(2), {
   env: {
     ...process.env,
     ETHERSCAN_INSTALL_METHOD: "npm",
+    ETHERSCAN_NPM_PACKAGE: packageInfo.name,
+    ETHERSCAN_NPM_WRAPPER_PID: String(process.pid),
   },
 });
 

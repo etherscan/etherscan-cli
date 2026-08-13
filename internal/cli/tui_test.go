@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/etherscan/etherscan-cli/internal/chains"
 	"github.com/etherscan/etherscan-cli/internal/client"
 	"github.com/etherscan/etherscan-cli/internal/tui"
@@ -216,7 +218,8 @@ func TestTuiChainListEntry(t *testing.T) {
 
 func TestTuiChainsPreservesSupportedChainMetadata(t *testing.T) {
 	all := tuiChains()
-	if len(all) != 64 || all[0].DisplayName != "Ethereum Mainnet" || all[len(all)-1].DisplayName != "MegaETH Testnet" {
+	// Tracks the registry count, which excludes the deprecated Moonbeam family.
+	if len(all) != 61 || all[0].DisplayName != "Ethereum Mainnet" || all[len(all)-1].DisplayName != "MegaETH Testnet" {
 		t.Fatalf("TUI chains do not follow supported-chains order: count=%d first=%q last=%q", len(all), all[0].DisplayName, all[len(all)-1].DisplayName)
 	}
 	for _, chain := range all {
@@ -310,13 +313,46 @@ func TestTuiEndpointsExcludeWriteActions(t *testing.T) {
 		t.Fatal("expected some browsable endpoints")
 	}
 	// Write/sensitive actions must never appear in the read-only explorer.
+	contractCount := 0
 	for _, e := range list {
+		if e.Module == "contract" {
+			contractCount++
+		}
 		if e.Module == "contract" && (e.Action == "verifysourcecode" || e.Action == "verifyproxycontract") {
 			t.Fatalf("write action leaked into TUI: %s/%s", e.Module, e.Action)
 		}
 		if e.Module == "proxy" && e.Action == "eth_sendRawTransaction" {
 			t.Fatalf("write action leaked into TUI: %s/%s", e.Module, e.Action)
 		}
+	}
+	// Counted by wire module, which the CLI group split does not change: 3 data
+	// reads plus the 2 verification polls.
+	if contractCount != 5 {
+		t.Fatalf("read-only TUI contract endpoint count = %d, want 5", contractCount)
+	}
+	// The two polls sit in the verification sidebar group, mirroring the CLI split
+	// (under the shorter label the panel can fit), but keep the contract wire
+	// module — it drives the executor lookup and the result header.
+	polls := map[string]bool{"checkverifystatus": true, "checkproxyverification": true}
+	seenPolls := 0
+	for _, e := range list {
+		switch {
+		case polls[e.Action]:
+			seenPolls++
+			if tuiGroup(e) != "verification" {
+				t.Fatalf("poll %s sidebar group = %q, want verification", e.Action, tuiGroup(e))
+			}
+			if e.Module != "contract" {
+				t.Fatalf("poll %s must keep wire module contract, got %q", e.Action, e.Module)
+			}
+		case e.Module == "contract":
+			if tuiGroup(e) != "contract" {
+				t.Fatalf("contract read %s sidebar group = %q, want contract", e.Action, tuiGroup(e))
+			}
+		}
+	}
+	if seenPolls != 2 {
+		t.Fatalf("browsable verification polls = %d, want 2", seenPolls)
 	}
 	if _, ok := index["proxy/eth_sendRawTransaction"]; ok {
 		t.Fatal("excluded action should not be in the executor index")
@@ -341,5 +377,171 @@ func TestTuiEndpointsExcludeWriteActions(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("account/balance not present in TUI endpoints")
+	}
+}
+
+// TestTuiSidebarLabelsFitPanel guards the MODULES panel layout. The panel is a
+// fixed width and lipgloss wraps rather than truncates, so a label longer than
+// tui.SidebarLabelMaxLen splits across two rows — which breaks the
+// one-row-per-item windowing and pushes the view past its height budget, trimming
+// the header off the top. The CLI group "contractverification" is itself too long,
+// which is why tuiGroupLabel shortens it to "verification".
+func TestTuiSidebarLabelsFitPanel(t *testing.T) {
+	list, _ := tuiEndpoints()
+	seen := map[string]bool{}
+	for _, e := range list {
+		label := tuiGroup(e)
+		if seen[label] {
+			continue
+		}
+		seen[label] = true
+		if len(label) > tui.SidebarLabelMaxLen {
+			t.Errorf("sidebar label %q is %d chars, exceeds the %d that fit the panel", label, len(label), tui.SidebarLabelMaxLen)
+		}
+	}
+	if !seen["verification"] {
+		t.Fatal("expected a verification sidebar group")
+	}
+	// Every label must be ordered, or rank() sinks it to the bottom of the sidebar.
+	for label := range seen {
+		if !slices.Contains(tuiModuleOrder, label) {
+			t.Errorf("sidebar label %q is missing from tuiModuleOrder and would sink to the end", label)
+		}
+	}
+}
+
+// TestTuiGroupLabelsCoverCLIGroups: every CLI command group either shares its name
+// with a sidebar label that fits the panel, or has an entry in tuiGroupLabel. Without
+// this, adding a group with a long name silently breaks the TUI layout again.
+func TestTuiGroupLabelsCoverCLIGroups(t *testing.T) {
+	for _, spec := range endpoints() {
+		group := spec.CommandGroup()
+		if _, mapped := tuiGroupLabel[group]; mapped {
+			continue
+		}
+		if len(group) > tui.SidebarLabelMaxLen {
+			t.Errorf("CLI group %q is %d chars and has no tuiGroupLabel entry; it would wrap in the sidebar", group, len(group))
+		}
+	}
+}
+
+// TestRootLevelPlacementIsExplicit pins where each endpoint lands in the command
+// tree. Placement used to be inferred from the wire module (`spec.Module ==
+// "getapilimit"`), which agreed with CommandGroup() only by accident: adding a
+// Group to that spec would have left the tree and the group label disagreeing.
+// RootLevel now declares the intent, and the two must never both be set — a
+// root-level command has no parent group, so a Group on it would be silently
+// ignored.
+func TestRootLevelPlacementIsExplicit(t *testing.T) {
+	root := newRootCommand(BuildInfo{Version: "test"}, &fakeUpdateManager{})
+
+	childNames := func(cmd *cobra.Command) map[string]*cobra.Command {
+		out := map[string]*cobra.Command{}
+		for _, c := range cmd.Commands() {
+			out[c.Name()] = c
+		}
+		return out
+	}
+	topLevel := childNames(root)
+
+	// Pin the actual command surface, not just spec/tree agreement. Without these
+	// two lines the loop below is self-fulfilling: drop RootLevel and the spec says
+	// "grouped" while the tree obligingly groups it, so consistency still holds and
+	// nothing catches that `etherscan apilimit` silently became
+	// `etherscan getapilimit apilimit`.
+	if _, ok := topLevel["apilimit"]; !ok {
+		t.Error("apilimit must be a top-level command: `etherscan apilimit`")
+	}
+	if _, ok := topLevel["getapilimit"]; ok {
+		t.Error("a \"getapilimit\" command group exists; apilimit is meant to sit at the root, not under its wire module")
+	}
+
+	for _, spec := range endpoints() {
+		name := commandWord(spec)
+		if spec.RootLevel {
+			if spec.Group != "" {
+				t.Errorf("%q sets both RootLevel and Group %q; a root-level command is never filed under a group", name, spec.Group)
+			}
+			if _, ok := topLevel[name]; !ok {
+				t.Errorf("RootLevel spec %q is not a direct child of the root command", name)
+			}
+			if _, grouped := topLevel[spec.CommandGroup()]; grouped {
+				t.Errorf("RootLevel spec %q also produced a %q command group", name, spec.CommandGroup())
+			}
+			continue
+		}
+		group, ok := topLevel[spec.CommandGroup()]
+		if !ok {
+			t.Errorf("spec %q expects command group %q, which is not under the root command", name, spec.CommandGroup())
+			continue
+		}
+		if _, ok := childNames(group)[name]; !ok {
+			t.Errorf("spec %q is not filed under its command group %q", name, spec.CommandGroup())
+		}
+	}
+}
+
+// commandWord is the first token of a spec's cobra Use string ("verify <address>"
+// -> "verify"), which identifies a spec in test failures better than a module and
+// action pair that several specs deliberately share.
+func commandWord(spec EndpointSpec) string {
+	if fields := strings.Fields(spec.Use); len(fields) > 0 {
+		return fields[0]
+	}
+	return spec.Action
+}
+
+// TestTuiEndpointIndexKeysAreUnique guards a latent collision in tuiEndpoints: the
+// executor index is keyed on Module+"/"+Action, and four contract specs share
+// contract/verifysourcecode (verify, verify-zksync, verify-vyper, verify-stylus).
+// A map cannot hold all four, so it would keep whichever came last and the TUI
+// would dispatch the wrong spec with no error. That never happens today only
+// because the Post/Sensitive filter drops all four before the index is built, so
+// this pins that dependency: if the filter moves or relaxes, or a browsable spec
+// reuses a module/action pair, the count stops matching here rather than silently
+// running the wrong endpoint for a user.
+func TestTuiEndpointIndexKeysAreUnique(t *testing.T) {
+	_, index := tuiEndpoints()
+
+	browsable := 0
+	seen := map[string]string{}
+	for _, spec := range endpoints() {
+		if spec.Post || spec.Sensitive {
+			continue
+		}
+		browsable++
+		key := spec.Module + "/" + spec.Action
+		if prev, dup := seen[key]; dup {
+			t.Errorf("browsable specs %q and %q both key the executor index on %q", prev, commandWord(spec), key)
+		}
+		seen[key] = commandWord(spec)
+	}
+
+	// A smaller index means browsable specs collided on a key; a larger one means
+	// tuiEndpoints stopped excluding Post/Sensitive specs, which reintroduces the
+	// four-way verifysourcecode collision. Either way the invariant is broken.
+	if len(index) != browsable {
+		t.Fatalf("executor index holds %d specs but %d specs are browsable: module/action keys collided, or tuiEndpoints changed which specs it excludes", len(index), browsable)
+	}
+}
+
+// TestVerificationSubmissionsShareOneWireAction documents why the collision above
+// stays latent: the source-verification variants intentionally share one wire
+// action and differ only by CLI command, so each must be excluded from the
+// read-only TUI. A variant added without Post or Sensitive would be browsable and
+// would start overwriting its siblings in the executor index.
+func TestVerificationSubmissionsShareOneWireAction(t *testing.T) {
+	var sharing []string
+	for _, spec := range endpoints() {
+		if spec.Module != "contract" || spec.Action != "verifysourcecode" {
+			continue
+		}
+		sharing = append(sharing, commandWord(spec))
+		if !spec.Post && !spec.Sensitive {
+			t.Errorf("%q shares contract/verifysourcecode but is neither Post nor Sensitive, so it reaches the TUI executor index", commandWord(spec))
+		}
+	}
+	if len(sharing) < 2 {
+		t.Fatalf("expected several specs sharing contract/verifysourcecode, got %v", sharing)
 	}
 }

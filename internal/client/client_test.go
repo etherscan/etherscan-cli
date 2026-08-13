@@ -3,8 +3,10 @@ package client
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -130,6 +132,94 @@ func TestClientBuildsRedactedV2Request(t *testing.T) {
 	errText := RedactSecrets(`Get "https://api.etherscan.io/v2/api?apikey=secret&module=account": dial failed`)
 	if strings.Contains(errText, "secret") || !strings.Contains(errText, "apikey=REDACTED") {
 		t.Fatalf("error text not redacted: %s", errText)
+	}
+}
+
+// TestPostFormSendsRoutingParamsInQuery pins where each parameter travels on a
+// POST. Etherscan V2 routes by chainid taken from the URL query (nginx maps
+// $arg_chainid to an upstream and never parses request bodies), so a chainid sent
+// only in the form body reaches the wrong chain's backend, which then rejects it
+// with "Missing or unsupported chainid parameter". Submissions therefore failed on
+// every chain except whichever one the default upstream serves.
+//
+// https://docs.etherscan.io/api-reference/endpoint/verifysourcecode puts chainid,
+// module, action and apikey in the query and the contract fields in the body.
+//
+// Asserting the query and body separately is the whole point: r.Form merges the
+// two on a POST, so a test built on it cannot see which side a parameter is on.
+func TestPostFormSendsRoutingParamsInQuery(t *testing.T) {
+	var query url.Values
+	var body url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query = r.URL.Query()
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err = url.ParseQuery(string(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		fmt.Fprint(w, `{"status":"1","message":"OK","result":"guid"}`)
+	}))
+	defer srv.Close()
+
+	// Sepolia, the chain the reported failure used. A mainnet-only case would pass
+	// even unfixed, because the default upstream serves mainnet.
+	c := New(Options{BaseURL: srv.URL, APIKey: "secret", ChainID: "11155111", RateLimit: 1000})
+	params := map[string]string{
+		"contractaddress": "0x0000000000000000000000000000000000000000",
+		"sourceCode":      "contract C {}",
+		"contractname":    "C",
+		"compilerversion": "v0.8.20+commit.a1b79de6",
+	}
+	if _, err := c.PostForm(context.Background(), "contract", "verifysourcecode", params, false); err != nil {
+		t.Fatal(err)
+	}
+
+	for key, want := range map[string]string{
+		"chainid": "11155111",
+		"module":  "contract",
+		"action":  "verifysourcecode",
+		"apikey":  "secret",
+	} {
+		if got := query.Get(key); got != want {
+			t.Errorf("query %s = %q, want %q (routing parameters must be in the URL)", key, got, want)
+		}
+		if body.Has(key) {
+			t.Errorf("%s must not be in the POST body; it belongs in the query", key)
+		}
+	}
+
+	for key, want := range params {
+		if got := body.Get(key); got != want {
+			t.Errorf("body %s = %q, want %q (contract fields belong in the body)", key, got, want)
+		}
+		if query.Has(key) {
+			t.Errorf("%s must not be in the query; it belongs in the POST body", key)
+		}
+	}
+}
+
+// TestPostFormPreservesBaseURLQuery: a --base-url carrying its own query keeps it,
+// and the client's chainid wins, matching how Get merges via mergeQuery.
+func TestPostFormPreservesBaseURLQuery(t *testing.T) {
+	var query url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query = r.URL.Query()
+		fmt.Fprint(w, `{"status":"1","message":"OK","result":"guid"}`)
+	}))
+	defer srv.Close()
+
+	c := New(Options{BaseURL: srv.URL + "/?extra=keep&chainid=1", APIKey: "secret", ChainID: "11155111", RateLimit: 1000})
+	if _, err := c.PostForm(context.Background(), "contract", "verifyproxycontract", map[string]string{"address": "0x0"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := query.Get("extra"); got != "keep" {
+		t.Errorf("extra = %q, want \"keep\": base-url query was dropped", got)
+	}
+	if got := query.Get("chainid"); got != "11155111" {
+		t.Errorf("chainid = %q, want the client's 11155111 to win over the base URL", got)
 	}
 }
 

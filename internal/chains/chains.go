@@ -48,9 +48,9 @@ var registry = []Chain{
 	{"5003", "mantle-sepolia", "Mantle Sepolia Testnet", []string{"mantle-testnet"}, "https://sepolia.mantlescan.xyz", "MNT", true, true},
 	{"4352", "memecore", "Memecore Mainnet", nil, "https://memecorescan.io", "", false, true},
 	{"43522", "memecore-testnet", "Memecore Insectarium Testnet", []string{"memecore-insectarium"}, "https://testnet.memecorescan.io", "", true, true},
-	{"1284", "moonbeam", "Moonbeam Mainnet", nil, "https://moonbeam.moonscan.io", "GLMR", false, true},
-	{"1285", "moonriver", "Moonriver Mainnet", nil, "https://moonriver.moonscan.io", "MOVR", false, true},
-	{"1287", "moonbase-alpha", "Moonbase Alpha Testnet", []string{"moonbase"}, "https://moonbase.moonscan.io", "DEV", true, true},
+	// Removed as deprecated: Moonbeam (1284), Moonriver (1285) and Moonbase Alpha
+	// (1287). Dropped here ahead of the chainlist endpoint, which is being updated
+	// to remove them too.
 	{"204", "opbnb", "opBNB Mainnet", nil, "https://opbnb.bscscan.com", "BNB", false, true},
 	{"5611", "opbnb-testnet", "opBNB Testnet", nil, "https://opbnb-testnet.bscscan.com", "BNB", true, true},
 	{"167000", "taiko", "Taiko Mainnet", nil, "https://taikoscan.io", "ETH", false, true},

@@ -51,6 +51,20 @@ type Endpoint struct {
 	Group string
 }
 
+// sidebarPanelWidth is the fixed width of the MODULES panel, and
+// SidebarLabelMaxLen is the longest group label that fits inside it: the panel
+// style adds one column of padding per side, and each row is indented by two
+// more. lipgloss wraps rather than truncates, so a longer label splits across two
+// rendered rows — which both looks broken and defeats the height accounting in
+// viewBrowse, since windowIndices sizes the window in items rather than rendered
+// rows. The view then overruns its budget and Bubble Tea trims it from the top,
+// taking the header with it (see the note in viewBrowse). Callers building sidebar
+// labels must respect this bound (see the CLI's tuiGroupLabel).
+const (
+	sidebarPanelWidth  = 18
+	SidebarLabelMaxLen = sidebarPanelWidth - 2 - 2
+)
+
 // group returns the sidebar group label for the endpoint.
 func (e Endpoint) group() string {
 	if e.Group != "" {
@@ -855,7 +869,7 @@ func (m model) viewBrowse() string {
 		mod.WriteString(line + "\n")
 	}
 	modLines := markTruncation(strings.TrimRight(mod.String(), "\n"), len(m.modules), mStart, mEnd)
-	modPanel := panelSt.Width(18).Render(modLines)
+	modPanel := panelSt.Width(sidebarPanelWidth).Render(modLines)
 
 	// Endpoints panel.
 	var ep strings.Builder

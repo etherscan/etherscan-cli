@@ -78,4 +78,54 @@ if ETHERSCAN_INSTALL_TEST_DOWNLOAD_BASE_URL="http://example.invalid" sh "$instal
     exit 1
 fi
 
+# Uninstall removes a provenanced dedicated installation, its exact profile block, and config.
+write_fixture third
+uninstall_home="$temp_dir/uninstall-home"
+config_home="$temp_dir/config-home"
+dedicated_dir="$temp_dir/dedicated dir"
+mkdir -p "$uninstall_home" "$config_home/etherscan"
+printf 'api_key = "test"\n' >"$config_home/etherscan/config.toml"
+HOME="$uninstall_home" SHELL=/bin/sh sh "$installer" --version "$version" --install-dir "$dedicated_dir" >/dev/null
+[ -f "$dedicated_dir/.etherscan-cli-path-added" ] || { printf 'installer did not record PATH provenance\n' >&2; exit 1; }
+chmod 0600 "$uninstall_home/.profile"
+HOME="$uninstall_home" XDG_CONFIG_HOME="$config_home" sh "$installer" --install-dir "$dedicated_dir" --uninstall >/dev/null
+[ ! -e "$dedicated_dir" ] || { printf 'provenanced uninstall left its directory\n' >&2; exit 1; }
+[ ! -e "$config_home/etherscan" ] || { printf 'uninstall left config behind\n' >&2; exit 1; }
+grep -F "$dedicated_dir" "$uninstall_home/.profile" >/dev/null && { printf 'uninstall left PATH block behind\n' >&2; exit 1; }
+[ "$(stat -c %a "$uninstall_home/.profile" 2>/dev/null || stat -f %Lp "$uninstall_home/.profile")" = 600 ] || { printf 'profile permissions changed\n' >&2; exit 1; }
+
+# A matching hand-written line without the adjacent marker must survive.
+manual_home="$temp_dir/manual-home"
+manual_dir="$temp_dir/manual dir"
+mkdir -p "$manual_home" "$manual_dir"
+printf 'manual\n' >"$manual_dir/etherscan"
+manual_line="export PATH=\"$manual_dir:\$PATH\""
+printf '%s\n' "$manual_line" >"$manual_home/.profile"
+HOME="$manual_home" XDG_CONFIG_HOME="$config_home" sh "$installer" --install-dir "$manual_dir" --uninstall >/dev/null
+grep -Fx "$manual_line" "$manual_home/.profile" >/dev/null || { printf 'uninstall removed a hand-written PATH line\n' >&2; exit 1; }
+[ -d "$manual_dir" ] || { printf 'uninstall removed an unprovenanced directory\n' >&2; exit 1; }
+
+# Installer-owned profile entries round-trip paths containing a literal backslash.
+backslash_home="$temp_dir/backslash-home"
+backslash_config_home="$temp_dir/backslash-config-home"
+backslash_dir="$temp_dir/back\\slash dir"
+mkdir -p "$backslash_home" "$backslash_config_home/etherscan"
+HOME="$backslash_home" SHELL=/bin/sh sh "$installer" --version "$version" --install-dir "$backslash_dir" >/dev/null
+grep -Fx '# Etherscan CLI' "$backslash_home/.profile" >/dev/null || { printf 'backslash-path install did not add its profile marker\n' >&2; exit 1; }
+HOME="$backslash_home" XDG_CONFIG_HOME="$backslash_config_home" sh "$installer" --install-dir "$backslash_dir" --uninstall >/dev/null
+[ ! -e "$backslash_dir" ] || { printf 'backslash-path uninstall left its directory\n' >&2; exit 1; }
+grep -Fx '# Etherscan CLI' "$backslash_home/.profile" >/dev/null && { printf 'backslash-path uninstall left its profile block behind\n' >&2; exit 1; }
+
+# A shared directory retains unrelated files, PATH, and provenance.
+shared_dir="$temp_dir/shared dir"
+HOME="$uninstall_home" SHELL=/bin/sh sh "$installer" --version "$version" --install-dir "$shared_dir" >/dev/null
+printf 'keep\n' >"$shared_dir/other"
+HOME="$uninstall_home" XDG_CONFIG_HOME="$config_home" sh "$installer" --install-dir "$shared_dir" --uninstall >/dev/null
+[ -e "$shared_dir/other" ] || { printf 'shared uninstall removed another file\n' >&2; exit 1; }
+[ -e "$shared_dir/.etherscan-cli-path-added" ] || { printf 'shared uninstall removed provenance\n' >&2; exit 1; }
+grep -F "$shared_dir" "$uninstall_home/.profile" >/dev/null || { printf 'shared uninstall removed PATH\n' >&2; exit 1; }
+
+# Repeated uninstall is a no-op.
+HOME="$uninstall_home" XDG_CONFIG_HOME="$config_home" sh "$installer" --install-dir "$dedicated_dir" --uninstall >/dev/null
+
 printf 'Shell installer tests passed.\n'

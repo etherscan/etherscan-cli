@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -57,6 +58,7 @@ type updateManager interface {
 	Skip(string) error
 	DetectMethod() string
 	Upgrade(context.Context, string, string, io.Writer, io.Writer) (bool, error)
+	Uninstall(context.Context, string, io.Writer, io.Writer) (bool, error)
 }
 
 func NewRootCommand(info BuildInfo) *cobra.Command {
@@ -104,7 +106,7 @@ func newRootCommand(info BuildInfo, updates updateManager) *cobra.Command {
 		return err
 	})
 
-	root.AddCommand(loginCommand(state), logoutCommand(state), uninstallCommand(state), configCommand(state), chainsCommand(state), whoamiCommand(state), versionCommand(info), updateCommand(info, updates), tuiCommand(state, info, updates), completionCommand(root))
+	root.AddCommand(loginCommand(state), logoutCommand(state), uninstallCommand(state, updates), configCommand(state), chainsCommand(state), whoamiCommand(state), versionCommand(info), updateCommand(info, updates), tuiCommand(state, info, updates), completionCommand(root))
 	addEndpointCommands(root, state)
 	return root
 }
@@ -118,17 +120,44 @@ func hideFlags(cmd *cobra.Command, names ...string) {
 func addEndpointCommands(root *cobra.Command, state *globalState) {
 	groups := map[string]*cobra.Command{}
 	for _, spec := range endpoints() {
-		if spec.Module == "getapilimit" {
+		if spec.RootLevel {
 			root.AddCommand(endpointCommand(state, spec))
 			continue
 		}
-		group, ok := groups[spec.Module]
+		name := spec.CommandGroup()
+		group, ok := groups[name]
 		if !ok {
-			group = &cobra.Command{Use: spec.Module, Short: "Etherscan " + spec.Module + " commands"}
-			groups[spec.Module] = group
+			group = &cobra.Command{
+				Use:   name,
+				Short: groupShort(name),
+				Long:  groupLong(name),
+				Args:  groupArgs(name),
+				// Runnable so cobra reaches Args validation. A non-runnable parent
+				// returns flag.ErrHelp first, which ExecuteC turns into "print help,
+				// exit 0" — see groupArgs.
+				RunE: func(cmd *cobra.Command, args []string) error { return cmd.Help() },
+			}
+			groups[name] = group
 			root.AddCommand(group)
 		}
 		group.AddCommand(endpointCommand(state, spec))
+	}
+}
+
+// groupArgs rejects leftover arguments on a parent group. Cobra only reports an
+// unknown command at the root; under a group it prints the parent's help to
+// stdout and exits 0, so a script still calling a command that moved or was
+// renamed would succeed with help text in its output stream instead of failing.
+func groupArgs(group string) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return nil
+		}
+		msg := fmt.Sprintf("unknown command %q for %q", args[0], cmd.CommandPath())
+		if hint := groupHint(group); hint != "" {
+			msg += "; " + hint
+		}
+		return errors.New(msg)
 	}
 }
 
@@ -148,6 +177,9 @@ func endpointCommand(state *globalState, spec EndpointSpec) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			for name, value := range spec.FixedParams {
+				params[name] = value
+			}
 			if err := populateFileParam(state, params); err != nil {
 				return err
 			}
@@ -158,11 +190,11 @@ func endpointCommand(state *globalState, spec EndpointSpec) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if spec.MainnetOnly && !chains.IsMainnetID(rt.chain.ID) {
-				return fmt.Errorf("%s/%s is only supported on Ethereum mainnet", spec.Module, spec.Action)
+			if err := validateEndpointChain(spec, rt.chain); err != nil {
+				return err
 			}
 			if spec.Sensitive && !state.yes {
-				if err := confirm(cmd.Context(), fmt.Sprintf("Submit %s/%s?", spec.Module, spec.Action)); err != nil {
+				if err := confirm(cmd.Context(), fmt.Sprintf("Submit %s/%s?", spec.Module, spec.Action), cmd.InOrStdin(), cmd.ErrOrStderr()); err != nil {
 					return err
 				}
 			}
@@ -180,9 +212,16 @@ func endpointCommand(state *globalState, spec EndpointSpec) *cobra.Command {
 		},
 	}
 	for _, param := range spec.Params {
-		cmd.Flags().String(flagName(param.Name), "", param.Usage)
+		value := new(string)
+		canonical := flagName(param.Name)
+		cmd.Flags().StringVar(value, canonical, "", param.Usage)
+		if legacy := legacyFlagName(param.Name); legacy != "" && legacy != canonical {
+			cmd.Flags().StringVar(value, legacy, "", param.Usage)
+			_ = cmd.Flags().MarkDeprecated(legacy, "use --"+canonical+" instead")
+			_ = cmd.Flags().MarkHidden(legacy)
+		}
 	}
-	if spec.Action == "verifysourcecode" {
+	if spec.AcceptsFile {
 		cmd.Flags().StringVar(&state.file, "file", "", "read source/payload content from file")
 	}
 	return cmd
@@ -440,38 +479,67 @@ func logoutCommand(state *globalState) *cobra.Command {
 	}
 }
 
-func uninstallCommand(state *globalState) *cobra.Command {
+func uninstallCommand(state *globalState, updates updateManager) *cobra.Command {
 	return &cobra.Command{
 		Use:   "uninstall",
-		Short: "Remove all etherscan CLI configuration (API key and settings)",
+		Short: "Remove Etherscan CLI and its saved configuration",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path, err := config.DefaultPath()
+			method := updates.DetectMethod()
+			prompt, err := uninstallPrompt(method)
 			if err != nil {
 				return err
 			}
-			dir := filepath.Dir(path)
-			if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
-				fmt.Fprintln(os.Stdout, "Nothing to remove; no configuration found.")
-				return nil
-			} else if err != nil {
-				return err
-			}
 			if !state.yes {
-				if err := confirm(cmd.Context(), fmt.Sprintf("Remove all configuration in %s?", dir)); err != nil {
+				if err := confirm(cmd.Context(), prompt, cmd.InOrStdin(), cmd.ErrOrStderr()); err != nil {
 					return err
 				}
 			}
-			if err := os.RemoveAll(dir); err != nil {
+			background, err := updates.Uninstall(cmd.Context(), method, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			if err != nil {
 				return err
 			}
-			fmt.Fprintf(os.Stdout, "Removed %s\n", dir)
+			if background {
+				fmt.Fprintln(cmd.OutOrStdout(), "Uninstall scheduled; removal will finish after this process exits.")
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), "Etherscan CLI uninstalled.")
+			}
+			if method == updater.MethodScript {
+				fmt.Fprintln(cmd.ErrOrStderr(), "note: manually created aliases or symlinks may still need to be removed.")
+			}
 			if os.Getenv("ETHERSCAN_API_KEY") != "" {
-				fmt.Fprintln(os.Stderr, "note: ETHERSCAN_API_KEY is still set in your environment; unset it in your shell to fully remove the key.")
+				fmt.Fprintln(cmd.ErrOrStderr(), "note: ETHERSCAN_API_KEY is still set in your environment; unset it in your shell to fully remove the key.")
 			}
 			return nil
 		},
 	}
+}
+
+func uninstallPrompt(method string) (string, error) {
+	configPath, err := config.DefaultPath()
+	if err != nil {
+		return "", err
+	}
+	var action string
+	switch method {
+	case updater.MethodHomebrew:
+		action = "  run     brew uninstall etherscan/etherscan-cli/etherscan"
+	case updater.MethodNPM:
+		packageName, err := updater.NPMPackageName()
+		if err != nil {
+			return "", err
+		}
+		action = "  run     npm uninstall -g " + packageName
+	case updater.MethodScript:
+		executable, err := os.Executable()
+		if err != nil {
+			return "", fmt.Errorf("locate current executable: %w", err)
+		}
+		action = fmt.Sprintf("  binary  %s\n  PATH    removed only with installer provenance and no shared files", executable)
+	default:
+		return "", fmt.Errorf("unsupported uninstall method %q", method)
+	}
+	return fmt.Sprintf("This will remove Etherscan CLI:\n%s\n  config  %s\n\nProceed?", action, filepath.Dir(configPath)), nil
 }
 
 func configCommand(state *globalState) *cobra.Command {
@@ -801,11 +869,34 @@ func tuiValidate(rt *resolvedRuntime, index map[string]EndpointSpec) func(module
 		if !ok {
 			return fmt.Errorf("unknown endpoint %s/%s", module, action)
 		}
-		if spec.MainnetOnly && !chains.IsMainnetID(rt.chain.ID) {
-			return fmt.Errorf("%s/%s is only supported on Ethereum mainnet", spec.Module, spec.Action)
+		if err := validateEndpointChain(spec, rt.chain); err != nil {
+			return err
 		}
 		return validateParams(spec, params)
 	}
+}
+
+func validateEndpointChain(spec EndpointSpec, chain chains.Chain) error {
+	if spec.MainnetOnly && !chains.IsMainnetID(chain.ID) {
+		return fmt.Errorf("%s/%s is only supported on Ethereum mainnet", spec.Module, spec.Action)
+	}
+	if len(spec.AllowedChainIDs) == 0 {
+		return nil
+	}
+	for _, id := range spec.AllowedChainIDs {
+		if chain.ID == id {
+			return nil
+		}
+	}
+	names := make([]string, len(spec.AllowedChainIDs))
+	for i, id := range spec.AllowedChainIDs {
+		if allowed, err := chains.Resolve(id); err == nil {
+			names[i] = allowed.DisplayName
+		} else {
+			names[i] = id
+		}
+	}
+	return fmt.Errorf("etherscan %s %s is only supported on %s", spec.CommandGroup(), strings.Fields(spec.Use)[0], strings.Join(names, " and "))
 }
 
 // tuiExec builds the explorer's executor. It re-runs tuiValidate before issuing
@@ -832,23 +923,38 @@ func tuiExec(rt *resolvedRuntime, index map[string]EndpointSpec) tui.Exec {
 	}
 }
 
-// tuiModuleOrder is the Etherscan docs order (https://docs.etherscan.io/introduction).
-// The TUI sidebar follows it so users can cross-reference the docs; the CLI command
-// tree is unaffected.
+// tuiModuleOrder is the Etherscan docs order (https://docs.etherscan.io/introduction),
+// with "verification" inserted for the CLI's own contractverification group, which has
+// no docs module of its own. The TUI sidebar follows this order so users can
+// cross-reference the docs; the CLI command tree is unaffected.
 var tuiModuleOrder = []string{
-	"account", "block", "contract", "gastracker", "proxy", "logs",
-	"stats", "transaction", "token", "nametag", "usage",
+	"account", "block", "contract", "verification", "gastracker", "proxy",
+	"logs", "stats", "transaction", "token", "nametag", "usage",
 }
 
-// tuiModuleGroup maps wire modules to the docs nav group they appear under when
-// the two differ. The TUI sidebar shows the docs group name; requests and result
-// headers keep the wire module.
-var tuiModuleGroup = map[string]string{
-	"getapilimit": "usage",
+// tuiGroupLabel maps a CLI command group to its sidebar label where the two differ.
+// The TUI sidebar shows this label; requests and result headers keep the wire module.
+// Two reasons a label diverges: getapilimit belongs to the docs "usage" nav group,
+// and contractverification is too long for the sidebar — labels must fit
+// tui.SidebarLabelMaxLen or lipgloss wraps them and breaks the panel layout
+// (TestTuiSidebarLabelsFitPanel enforces this).
+var tuiGroupLabel = map[string]string{
+	"getapilimit":          "usage",
+	"contractverification": "verification",
 }
 
-// tuiActionOrder is the docs sidebar order WITHIN each module (scraped from the
-// rendered nav on docs.etherscan.io, 2026-07-11). Actions whose docs page lives in
+// tuiSidebarGroup returns the sidebar label for a spec: the CLI group's label when
+// one is mapped, else the wire module.
+func tuiSidebarGroup(spec EndpointSpec) string {
+	if label, ok := tuiGroupLabel[spec.CommandGroup()]; ok {
+		return label
+	}
+	return spec.Module
+}
+
+// tuiActionOrder is the docs sidebar order WITHIN each sidebar group — usually a
+// wire module, but "verification" is a CLI group label (see tuiGroupLabel). Scraped
+// from the rendered nav on docs.etherscan.io, 2026-07-11. Actions whose docs page lives in
 // a different docs group than their API module (token balances, L2 transfers,
 // daily-series stats) are appended after the module's own group, in their group's
 // order. Actions not listed here (e.g. undocumented stats series) sink to the end
@@ -864,9 +970,14 @@ var tuiActionOrder = map[string][]string{
 		// L2 deposits/withdrawals docs group
 		"txnbridge", "getdeposittxs", "getwithdrawaltxs",
 	},
-	"block":      {"getblockreward", "getblocktxnscount", "getblockcountdown", "getblocknobytime"},
-	"contract":   {"getabi", "getsourcecode", "getcontractcreation", "verifysourcecode", "checkverifystatus", "verifyproxycontract", "checkproxyverification"},
-	"gastracker": {"gasestimate", "gasoracle"},
+	"block":    {"getblockreward", "getblocktxnscount", "getblockcountdown", "getblocknobytime"},
+	"contract": {"getabi", "getsourcecode", "getcontractcreation"},
+	// Keyed by sidebar label, not CLI group. Only checkverifystatus and
+	// checkproxyverification are browsable; verifysourcecode and
+	// verifyproxycontract are Post/Sensitive and filtered out before this
+	// ordering applies, but are listed so the intended order is recorded.
+	"verification": {"verifysourcecode", "checkverifystatus", "verifyproxycontract", "checkproxyverification"},
+	"gastracker":   {"gasestimate", "gasoracle"},
 	"proxy": {
 		"eth_blockNumber", "eth_getBlockByNumber", "eth_getUncleByBlockNumberAndIndex",
 		"eth_getBlockTransactionCountByNumber", "eth_getTransactionByHash",
@@ -919,7 +1030,7 @@ func tuiEndpoints() ([]tui.Endpoint, map[string]EndpointSpec) {
 			Params:    params,
 			Columns:   spec.Columns,
 			Paginated: spec.Paginated,
-			Group:     tuiModuleGroup[spec.Module],
+			Group:     tuiSidebarGroup(spec),
 		})
 		index[spec.Module+"/"+spec.Action] = spec
 	}
@@ -933,7 +1044,7 @@ func tuiEndpoints() ([]tui.Endpoint, map[string]EndpointSpec) {
 		Desc:    "List all supported Etherscan chains",
 		Columns: []string{"chainname", "chainid", "blockexplorer", "status"},
 		Bare:    true,
-		Group:   tuiModuleGroup["getapilimit"],
+		Group:   tuiGroupLabel["getapilimit"],
 	})
 	groupOf := func(e tui.Endpoint) string {
 		if e.Group != "" {
@@ -1180,6 +1291,25 @@ func validateParams(spec EndpointSpec, params map[string]string) error {
 			if err := client.ValidateHex(p.Name, v); err != nil {
 				return err
 			}
+		case KindZeroOne:
+			if v != "" && v != "0" && v != "1" {
+				return fmt.Errorf("%s must be 0 or 1", p.Name)
+			}
+		case KindConstructorArgs:
+			normalized, err := normalizeConstructorArguments(v)
+			if err != nil {
+				return err
+			}
+			params[p.Name] = normalized
+		case KindLicense:
+			if err := validateLicenseType(v); err != nil {
+				return err
+			}
+		}
+	}
+	if spec.Module == "contract" && spec.Action == "verifysourcecode" {
+		if err := validateSourceVerification(spec, params); err != nil {
+			return err
 		}
 	}
 	if len(spec.RequireOneOf) > 0 {
@@ -1254,12 +1384,20 @@ func validateAdvancedFilter(params map[string]string) error {
 }
 
 func populateFileParam(state *globalState, params map[string]string) error {
-	if state.file == "" {
+	if state.file == "" || params["sourceCode"] != "" {
 		return nil
 	}
-	data, err := os.ReadFile(state.file)
+	file, err := os.Open(state.file)
 	if err != nil {
 		return err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxVerificationSourceBytes+1))
+	if err != nil {
+		return err
+	}
+	if len(data) > maxVerificationSourceBytes {
+		return fmt.Errorf("verification source exceeds the %d-byte limit", maxVerificationSourceBytes)
 	}
 	if params["sourceCode"] == "" {
 		params["sourceCode"] = string(data)
@@ -1267,11 +1405,72 @@ func populateFileParam(state *globalState, params map[string]string) error {
 	return nil
 }
 
-func confirm(ctx context.Context, prompt string) error {
-	fmt.Fprintf(os.Stderr, "%s [y/N] ", prompt)
+const (
+	maxVerificationSourceBytes  = 3_000_000
+	maxConstructorArgumentChars = 250_000
+)
+
+func normalizeConstructorArguments(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	if strings.HasPrefix(value, "0x") || strings.HasPrefix(value, "0X") {
+		value = value[2:]
+	}
+	if len(value) > maxConstructorArgumentChars {
+		return "", fmt.Errorf("constructorArguments exceeds the %d-character limit", maxConstructorArgumentChars)
+	}
+	if len(value)%2 != 0 {
+		return "", errors.New("constructorArguments must contain an even number of hexadecimal characters")
+	}
+	if _, err := hex.DecodeString(value); err != nil {
+		return "", errors.New("constructorArguments must be hexadecimal without a 0x prefix")
+	}
+	return value, nil
+}
+
+func validateLicenseType(value string) error {
+	if value == "" {
+		return nil
+	}
+	license, err := strconv.Atoi(value)
+	if err != nil || license < 1 || license > 14 {
+		return errors.New("licenseType must be an integer from 1 to 14")
+	}
+	return nil
+}
+
+func validateSourceVerification(spec EndpointSpec, params map[string]string) error {
+	if len(params["sourceCode"]) > maxVerificationSourceBytes {
+		return fmt.Errorf("verification source exceeds the %d-byte limit", maxVerificationSourceBytes)
+	}
+	format := params["codeformat"]
+	allowed := false
+	for _, candidate := range spec.AllowedCodeFormats {
+		if format == candidate {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return fmt.Errorf("unsupported codeformat %q for etherscan %s %s", format, spec.CommandGroup(), strings.Fields(spec.Use)[0])
+	}
+	switch format {
+	case "solidity-single-file", "vyper-json":
+		if params["optimizationUsed"] == "" {
+			return fmt.Errorf("missing required optimizationUsed for %s", format)
+		}
+	case "solidity-standard-json-input", "stylus":
+	}
+	return nil
+}
+
+func confirm(ctx context.Context, prompt string, input io.Reader, output io.Writer) error {
+	fmt.Fprintf(output, "%s [y/N] ", prompt)
 	done := make(chan string, 1)
 	go func() {
-		reader := bufio.NewReader(os.Stdin)
+		reader := bufio.NewReader(input)
 		line, _ := reader.ReadString('\n')
 		done <- strings.TrimSpace(strings.ToLower(line))
 	}()
@@ -1305,8 +1504,28 @@ func firstNonEmpty(values ...string) string {
 }
 
 func flagName(name string) string {
-	replacer := strings.NewReplacer("_", "-", "sourceCode", "source-code", "fromBlock", "from-block", "toBlock", "to-block", "gasPrice", "gas-price")
+	replacer := strings.NewReplacer(
+		"_", "-",
+		"sourceCode", "source-code",
+		"fromBlock", "from-block",
+		"toBlock", "to-block",
+		"gasPrice", "gas-price",
+		"optimizationUsed", "optimization-used",
+		"constructorArguments", "constructor-arguments",
+		"evmVersion", "evm-version",
+		"licenseType", "license-type",
+		"zksolcVersion", "zksolc-version",
+	)
 	return replacer.Replace(name)
+}
+
+func legacyFlagName(name string) string {
+	switch name {
+	case "optimizationUsed", "constructorArguments", "evmVersion", "licenseType", "zksolcVersion":
+		return name
+	default:
+		return ""
+	}
 }
 
 func atoi(value string) int {

@@ -29,6 +29,12 @@ func TestDetectMethod(t *testing.T) {
 	if got := service.DetectMethod(); got != MethodNPM {
 		t.Fatalf("DetectMethod() = %q, want %q", got, MethodNPM)
 	}
+	service.Executable = func() (string, error) {
+		return filepath.Join(string(filepath.Separator), "usr", "lib", "node_modules", "@etherscan-npm", "cli", "vendor", "etherscan"), nil
+	}
+	if got := service.DetectMethod(); got != MethodNPM {
+		t.Fatalf("DetectMethod() for transitional scope = %q, want %q", got, MethodNPM)
+	}
 	t.Setenv("ETHERSCAN_INSTALL_METHOD", MethodNPM)
 	service.Executable = func() (string, error) { return filepath.Join(t.TempDir(), "etherscan"), nil }
 	if got := service.DetectMethod(); got != MethodNPM {
