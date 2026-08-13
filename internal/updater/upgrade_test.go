@@ -35,6 +35,13 @@ func TestDetectMethod(t *testing.T) {
 	if got := service.DetectMethod(); got != MethodNPM {
 		t.Fatalf("DetectMethod() for transitional scope = %q, want %q", got, MethodNPM)
 	}
+	// The current layout: the binary lives in a platform package, not the umbrella.
+	service.Executable = func() (string, error) {
+		return filepath.Join(string(filepath.Separator), "usr", "lib", "node_modules", "@etherscan-npm", "cli-linux-x64", "etherscan"), nil
+	}
+	if got := service.DetectMethod(); got != MethodNPM {
+		t.Fatalf("DetectMethod() for platform package = %q, want %q", got, MethodNPM)
+	}
 	t.Setenv("ETHERSCAN_INSTALL_METHOD", MethodNPM)
 	service.Executable = func() (string, error) { return filepath.Join(t.TempDir(), "etherscan"), nil }
 	if got := service.DetectMethod(); got != MethodNPM {
@@ -45,7 +52,7 @@ func TestDetectMethod(t *testing.T) {
 func TestNPMUpgradeReturnsPackageManagerInstruction(t *testing.T) {
 	service := NewService()
 	_, err := service.Upgrade(context.Background(), MethodNPM, "1.2.0", &bytes.Buffer{}, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "npm install -g @etherscan/cli@latest") {
+	if err == nil || !strings.Contains(err.Error(), "npm install -g @etherscan-npm/cli@latest") {
 		t.Fatalf("Upgrade() error = %v, want npm install instruction", err)
 	}
 }

@@ -75,7 +75,7 @@ if (require.main === module) {
   try {
     main();
   } catch (error) {
-    console.error(`Refusing to publish @etherscan/cli: ${error.message}`);
+    console.error(`Refusing to publish @etherscan-npm/cli: ${error.message}`);
     process.exit(1);
   }
 }

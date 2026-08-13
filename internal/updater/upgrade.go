@@ -25,6 +25,20 @@ const (
 	NPMWrapperPIDEnv     = "ETHERSCAN_NPM_WRAPPER_PID"
 )
 
+// npmPlatformSuffixes are the per-platform package names published alongside each
+// umbrella. Since 1.0.4 the umbrella ships only the launcher, so a binary npm owns
+// lives in one of these siblings. The empty suffix keeps <=1.0.3 installations,
+// which vendored the binary inside the umbrella itself, detectable.
+var npmPlatformSuffixes = []string{
+	"",
+	"-darwin-arm64",
+	"-darwin-x64",
+	"-linux-arm64",
+	"-linux-x64",
+	"-win32-arm64",
+	"-win32-x64",
+}
+
 var runtimeGOOS = runtime.GOOS
 
 type commandRunner func(context.Context, string, []string, io.Writer, io.Writer, bool) error
@@ -81,11 +95,18 @@ func validateNPMPackageName(name string) (string, error) {
 	}
 }
 
+// npmPackageFromExecutable reports the umbrella package that owns executable. A
+// platform package resolves to its umbrella so uninstall never targets a sibling,
+// which npm removes with the umbrella anyway. Both surrounding slashes are
+// required, which is what rejects lookalikes: "@etherscan/cli-malicious" and
+// "@etherscan-npm/cli-linux-x64-malicious" cannot match a bare suffix.
 func npmPackageFromExecutable(executable string) (string, bool) {
 	normalized := strings.ToLower(filepath.ToSlash(executable))
-	for _, candidate := range []string{NPMCanonicalPackage, NPMTransitionalPackage} {
-		if strings.Contains(normalized, "/node_modules/"+candidate+"/") {
-			return candidate, true
+	for _, umbrella := range []string{NPMCanonicalPackage, NPMTransitionalPackage} {
+		for _, suffix := range npmPlatformSuffixes {
+			if strings.Contains(normalized, "/node_modules/"+umbrella+suffix+"/") {
+				return umbrella, true
+			}
 		}
 	}
 	return "", false
@@ -106,7 +127,7 @@ func (s *Service) Upgrade(ctx context.Context, method, version string, stdout, s
 		return false, fmt.Errorf("unsupported update method %q (use homebrew, npm, or script)", method)
 	}
 	if method == MethodNPM {
-		return false, fmt.Errorf("npm manages this installation; run npm install -g @etherscan/cli@latest")
+		return false, fmt.Errorf("npm manages this installation; run npm install -g %s@latest", NPMTransitionalPackage)
 	}
 	if method == MethodHomebrew {
 		if _, err := s.lookPath()("brew"); err != nil {

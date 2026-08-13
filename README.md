@@ -52,7 +52,7 @@ Or run it once without keeping a global installation:
 npx @etherscan-npm/cli version
 ```
 
-The npm package downloads the matching native release archive and verifies its SHA-256 checksum during installation. Lifecycle scripts must be enabled.
+The npm package selects a platform-specific optional dependency containing the native binary. It does not run installation lifecycle scripts. Installing with `--omit=optional` is not supported.
 
 > The package is currently published as `@etherscan-npm/cli` while the `@etherscan` npm scope is being transferred. The `etherscan` command is unchanged.
 
@@ -488,9 +488,20 @@ go build -o etherscan ./cmd/etherscan
 
 Installer changes can be checked with `sh scripts/test-install.sh` on macOS/Linux or `./scripts/test-install.ps1` in PowerShell on Windows.
 
-The npm distribution can be checked with `sh scripts/test-npm.sh` on macOS/Linux or `./scripts/test-npm.ps1` in PowerShell. These tests pack and install the package against local fixture release archives; they do not publish to npm.
+The npm distribution can be checked with `sh scripts/test-npm.sh` on macOS/Linux or `./scripts/test-npm.ps1` in PowerShell. These tests pack and install the umbrella and current-platform packages with lifecycle scripts disabled; they do not publish to npm.
 
-For the first npm release, publish the GitHub release assets before publishing the package. From an exact release-tag checkout, run `npm version --no-git-tag-version <version>` followed by `npm publish --access public`. Then configure npm trusted publishing for `etherscan/etherscan-cli` and `.github/workflows/release.yml`, and set the `NPM_PUBLISH_ENABLED` repository variable to `true` for later tagged releases.
+The first seven-package npm release requires a one-time bootstrap by an npm administrator with publish access to the `@etherscan-npm` scope. After the matching GitHub release succeeds, check out its exact tag and run:
+
+```sh
+gh release download v1.0.4 --dir dist
+npm login
+npm whoami
+VERSION=1.0.4 node npm/publish.js
+```
+
+The publisher verifies all six archives against `checksums.txt`, creates the six public platform packages by publishing them first, and publishes `@etherscan-npm/cli` last. It safely skips exact versions that already exist so a partial publication can be retried. Replace `1.0.4` with the actual unused release version if necessary.
+
+After the bootstrap, configure npm trusted publishing for the umbrella and all six platform packages, targeting `etherscan/etherscan-cli` and `.github/workflows/release.yml`. Set the `NPM_PUBLISH_ENABLED` repository variable to `true`; subsequent tagged releases publish through GitHub Actions with provenance.
 
 ## API coverage and support
 

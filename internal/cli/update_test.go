@@ -95,7 +95,7 @@ func TestOfferUpdateChoices(t *testing.T) {
 		if err != nil || !exit || manager.upgradedVersion != "" {
 			t.Fatalf("unexpected result: exit=%v err=%v manager=%+v", exit, err, manager)
 		}
-		if !strings.Contains(out.String(), "npm install -g @etherscan/cli@latest") {
+		if !strings.Contains(out.String(), "npm install -g @etherscan-npm/cli@latest") {
 			t.Fatalf("output = %q, want npm install instruction", out.String())
 		}
 	})
@@ -135,7 +135,7 @@ func TestUpdateCommandShowsNPMInstruction(t *testing.T) {
 	if manager.upgradedVersion != "" {
 		t.Fatalf("npm update invoked updater: %+v", manager)
 	}
-	if !strings.Contains(out.String(), "npm install -g @etherscan/cli@latest") {
+	if !strings.Contains(out.String(), "npm install -g @etherscan-npm/cli@latest") {
 		t.Fatalf("output = %q, want npm install instruction", out.String())
 	}
 }
@@ -156,7 +156,7 @@ func TestUpdateCommandCannotForceScriptForNPMInstallation(t *testing.T) {
 	if manager.upgradedVersion != "" {
 		t.Fatalf("npm update invoked forced script updater: %+v", manager)
 	}
-	if !strings.Contains(out.String(), "npm install -g @etherscan/cli@latest") {
+	if !strings.Contains(out.String(), "npm install -g @etherscan-npm/cli@latest") {
 		t.Fatalf("output = %q, want npm install instruction", out.String())
 	}
 }

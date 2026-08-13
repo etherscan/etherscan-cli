@@ -1,11 +1,8 @@
 "use strict";
 
-// `npm pack` copies the working tree, so a checkout that rewrote the LF blobs to
-// CRLF produces a tarball whose scripts/install.sh cannot be run by /bin/sh.
-// That is how @etherscan-npm/cli@1.0.1 shipped an installer that failed on Linux
-// and macOS: every CI job either packed on a platform that checks out LF, or
-// packed on Windows and then installed through scripts/install.ps1, so the broken
-// combination was never exercised. Pack the real tarball and inspect it here.
+// Pack the real tarball and inspect every shipped text file. This retains the
+// line-ending regression gate that caught the broken 1.0.1 Linux/macOS package,
+// while the package itself no longer ships or executes installer scripts.
 //
 // This walks everything the tarball actually contains rather than re-reading
 // package.json "files". The tarball is the ground truth of what ships, and
@@ -19,19 +16,19 @@ const { checkFileLineEndings } = require("./prepublish-check");
 
 const repositoryRoot = path.resolve(__dirname, "..");
 
-function quote(value) {
-  return `"${value}"`;
-}
-
-// A single command string with shell:true keeps this portable across cmd.exe and
-// sh without tripping the DEP0190 warning that args plus shell:true now raises.
-function run(command, cwd) {
-  const result = spawnSync(command, { cwd, encoding: "utf8", shell: true });
+function run(command, args, cwd) {
+  let executable = command;
+  let commandArgs = args;
+  if (command === "npm" && process.env.npm_execpath) {
+    executable = process.execPath;
+    commandArgs = [process.env.npm_execpath, ...args];
+  }
+  const result = spawnSync(executable, commandArgs, { cwd, encoding: "utf8" });
   if (result.error) {
     throw result.error;
   }
   if (result.status !== 0) {
-    throw new Error(`${command} failed with status ${result.status}\n${result.stderr || ""}`);
+    throw new Error(`${executable} ${commandArgs.join(" ")} failed with status ${result.status}\n${result.stderr || ""}`);
   }
   return result.stdout;
 }
@@ -66,7 +63,7 @@ function checkTree(rootDir) {
 function main() {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "etherscan-tarball-eol-"));
   try {
-    const stdout = run(`npm pack --pack-destination ${quote(workDir)}`, repositoryRoot);
+    const stdout = run("npm", ["pack", "--pack-destination", workDir], repositoryRoot);
     const tarballName = stdout.trim().split(/\r?\n/).pop();
     const tarball = path.join(workDir, tarballName);
     if (!fs.existsSync(tarball)) {
@@ -75,13 +72,13 @@ function main() {
 
     // Extract by relative name from workDir: GNU tar treats the colon in an
     // absolute Windows path as a remote host specification.
-    run(`tar -xzf ${quote(tarballName)}`, workDir);
+    run("tar", ["-xzf", tarballName], workDir);
     const packageDir = path.join(workDir, "package");
 
     // Guard against a silent pass if the tarball layout ever changes.
-    const installer = path.join(packageDir, "scripts", "install.sh");
-    if (!fs.existsSync(installer)) {
-      throw new Error(`the packed tarball does not contain scripts/install.sh (looked in ${packageDir})`);
+    const launcher = path.join(packageDir, "npm", "bin", "etherscan.js");
+    if (!fs.existsSync(launcher)) {
+      throw new Error(`the packed tarball does not contain npm/bin/etherscan.js (looked in ${packageDir})`);
     }
 
     const checked = checkTree(packageDir);
