@@ -155,26 +155,38 @@ func (c *Client) ChainList(ctx context.Context) (Result, error) {
 	return c.do(ctx, http.MethodGet, endpoint, "", true, decodeChainList)
 }
 
+// PostForm submits a write action. module, action, chainid and apikey go in the
+// URL query and only the endpoint's own parameters go in the form body, per
+// https://docs.etherscan.io/api-reference/endpoint/verifysourcecode.
+//
+// chainid must be in the query specifically: Etherscan routes a request to the
+// chain's backend with an nginx `map $arg_chainid $upstream_server`, which reads
+// the query string and never parses the body. Sent in the body it is invisible to
+// the router, the request lands on the default upstream, and that server compares
+// the body chainid against its own and answers "Missing or unsupported chainid
+// parameter" — so submissions failed on every chain but the default one.
 func (c *Client) PostForm(ctx context.Context, module, action string, params map[string]string, retryable bool) (Result, error) {
-	values := url.Values{}
-	values.Set("module", module)
-	values.Set("action", action)
+	query := url.Values{}
+	query.Set("module", module)
+	query.Set("action", action)
 	if c.chainID != "" {
-		values.Set("chainid", c.chainID)
+		query.Set("chainid", c.chainID)
 	}
 	if c.apiKey != "" {
-		values.Set("apikey", c.apiKey)
+		query.Set("apikey", c.apiKey)
 	}
+	body := url.Values{}
 	for k, v := range params {
 		if strings.TrimSpace(v) != "" {
-			values.Set(k, v)
+			body.Set(k, v)
 		}
 	}
 	endpoint, err := url.Parse(c.baseURL)
 	if err != nil {
 		return Result{}, err
 	}
-	return c.do(ctx, http.MethodPost, endpoint.String(), values.Encode(), retryable, decodeEnvelope)
+	endpoint.RawQuery = mergeQuery(endpoint.Query(), query).Encode()
+	return c.do(ctx, http.MethodPost, endpoint.String(), body.Encode(), retryable, decodeEnvelope)
 }
 
 func (c *Client) do(ctx context.Context, method, endpoint, body string, retryable bool, decode func([]byte) (Result, error)) (Result, error) {

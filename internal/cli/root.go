@@ -120,7 +120,7 @@ func hideFlags(cmd *cobra.Command, names ...string) {
 func addEndpointCommands(root *cobra.Command, state *globalState) {
 	groups := map[string]*cobra.Command{}
 	for _, spec := range endpoints() {
-		if spec.Module == "getapilimit" {
+		if spec.RootLevel {
 			root.AddCommand(endpointCommand(state, spec))
 			continue
 		}

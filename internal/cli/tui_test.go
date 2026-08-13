@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/etherscan/etherscan-cli/internal/chains"
 	"github.com/etherscan/etherscan-cli/internal/client"
 	"github.com/etherscan/etherscan-cli/internal/tui"
@@ -419,5 +421,126 @@ func TestTuiGroupLabelsCoverCLIGroups(t *testing.T) {
 		if len(group) > tui.SidebarLabelMaxLen {
 			t.Errorf("CLI group %q is %d chars and has no tuiGroupLabel entry; it would wrap in the sidebar", group, len(group))
 		}
+	}
+}
+
+// TestRootLevelPlacementIsExplicit pins where each endpoint lands in the command
+// tree. Placement used to be inferred from the wire module (`spec.Module ==
+// "getapilimit"`), which agreed with CommandGroup() only by accident: adding a
+// Group to that spec would have left the tree and the group label disagreeing.
+// RootLevel now declares the intent, and the two must never both be set — a
+// root-level command has no parent group, so a Group on it would be silently
+// ignored.
+func TestRootLevelPlacementIsExplicit(t *testing.T) {
+	root := newRootCommand(BuildInfo{Version: "test"}, &fakeUpdateManager{})
+
+	childNames := func(cmd *cobra.Command) map[string]*cobra.Command {
+		out := map[string]*cobra.Command{}
+		for _, c := range cmd.Commands() {
+			out[c.Name()] = c
+		}
+		return out
+	}
+	topLevel := childNames(root)
+
+	// Pin the actual command surface, not just spec/tree agreement. Without these
+	// two lines the loop below is self-fulfilling: drop RootLevel and the spec says
+	// "grouped" while the tree obligingly groups it, so consistency still holds and
+	// nothing catches that `etherscan apilimit` silently became
+	// `etherscan getapilimit apilimit`.
+	if _, ok := topLevel["apilimit"]; !ok {
+		t.Error("apilimit must be a top-level command: `etherscan apilimit`")
+	}
+	if _, ok := topLevel["getapilimit"]; ok {
+		t.Error("a \"getapilimit\" command group exists; apilimit is meant to sit at the root, not under its wire module")
+	}
+
+	for _, spec := range endpoints() {
+		name := commandWord(spec)
+		if spec.RootLevel {
+			if spec.Group != "" {
+				t.Errorf("%q sets both RootLevel and Group %q; a root-level command is never filed under a group", name, spec.Group)
+			}
+			if _, ok := topLevel[name]; !ok {
+				t.Errorf("RootLevel spec %q is not a direct child of the root command", name)
+			}
+			if _, grouped := topLevel[spec.CommandGroup()]; grouped {
+				t.Errorf("RootLevel spec %q also produced a %q command group", name, spec.CommandGroup())
+			}
+			continue
+		}
+		group, ok := topLevel[spec.CommandGroup()]
+		if !ok {
+			t.Errorf("spec %q expects command group %q, which is not under the root command", name, spec.CommandGroup())
+			continue
+		}
+		if _, ok := childNames(group)[name]; !ok {
+			t.Errorf("spec %q is not filed under its command group %q", name, spec.CommandGroup())
+		}
+	}
+}
+
+// commandWord is the first token of a spec's cobra Use string ("verify <address>"
+// -> "verify"), which identifies a spec in test failures better than a module and
+// action pair that several specs deliberately share.
+func commandWord(spec EndpointSpec) string {
+	if fields := strings.Fields(spec.Use); len(fields) > 0 {
+		return fields[0]
+	}
+	return spec.Action
+}
+
+// TestTuiEndpointIndexKeysAreUnique guards a latent collision in tuiEndpoints: the
+// executor index is keyed on Module+"/"+Action, and four contract specs share
+// contract/verifysourcecode (verify, verify-zksync, verify-vyper, verify-stylus).
+// A map cannot hold all four, so it would keep whichever came last and the TUI
+// would dispatch the wrong spec with no error. That never happens today only
+// because the Post/Sensitive filter drops all four before the index is built, so
+// this pins that dependency: if the filter moves or relaxes, or a browsable spec
+// reuses a module/action pair, the count stops matching here rather than silently
+// running the wrong endpoint for a user.
+func TestTuiEndpointIndexKeysAreUnique(t *testing.T) {
+	_, index := tuiEndpoints()
+
+	browsable := 0
+	seen := map[string]string{}
+	for _, spec := range endpoints() {
+		if spec.Post || spec.Sensitive {
+			continue
+		}
+		browsable++
+		key := spec.Module + "/" + spec.Action
+		if prev, dup := seen[key]; dup {
+			t.Errorf("browsable specs %q and %q both key the executor index on %q", prev, commandWord(spec), key)
+		}
+		seen[key] = commandWord(spec)
+	}
+
+	// A smaller index means browsable specs collided on a key; a larger one means
+	// tuiEndpoints stopped excluding Post/Sensitive specs, which reintroduces the
+	// four-way verifysourcecode collision. Either way the invariant is broken.
+	if len(index) != browsable {
+		t.Fatalf("executor index holds %d specs but %d specs are browsable: module/action keys collided, or tuiEndpoints changed which specs it excludes", len(index), browsable)
+	}
+}
+
+// TestVerificationSubmissionsShareOneWireAction documents why the collision above
+// stays latent: the source-verification variants intentionally share one wire
+// action and differ only by CLI command, so each must be excluded from the
+// read-only TUI. A variant added without Post or Sensitive would be browsable and
+// would start overwriting its siblings in the executor index.
+func TestVerificationSubmissionsShareOneWireAction(t *testing.T) {
+	var sharing []string
+	for _, spec := range endpoints() {
+		if spec.Module != "contract" || spec.Action != "verifysourcecode" {
+			continue
+		}
+		sharing = append(sharing, commandWord(spec))
+		if !spec.Post && !spec.Sensitive {
+			t.Errorf("%q shares contract/verifysourcecode but is neither Post nor Sensitive, so it reaches the TUI executor index", commandWord(spec))
+		}
+	}
+	if len(sharing) < 2 {
+		t.Fatalf("expected several specs sharing contract/verifysourcecode, got %v", sharing)
 	}
 }

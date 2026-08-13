@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -55,53 +56,75 @@ func TestContractVerificationRegistry(t *testing.T) {
 
 func TestVerificationVariantsSendExpectedForm(t *testing.T) {
 	tests := []struct {
-		name    string
-		chain   string
-		command string
-		flags   []string
-		want    map[string]string
+		name        string
+		chain       string
+		wantChainID string
+		command     string
+		flags       []string
+		want        map[string]string
 	}{
 		{
-			name:    "solidity",
-			chain:   "ethereum",
-			command: "verify",
-			flags:   []string{"--source-code", "contract C {}", "--codeformat", "solidity-single-file", "--contractname", "C", "--compilerversion", "v0.8.24", "--optimization-used", "0", "--constructor-arguments", "0x00aa", "--license-type", "3"},
-			want:    map[string]string{"codeformat": "solidity-single-file", "constructorArguments": "00aa", "optimizationUsed": "0", "licenseType": "3"},
+			name:        "solidity",
+			chain:       "sepolia",
+			wantChainID: "11155111",
+			command:     "verify",
+			flags:       []string{"--source-code", "contract C {}", "--codeformat", "solidity-single-file", "--contractname", "C", "--compilerversion", "v0.8.24", "--optimization-used", "0", "--constructor-arguments", "0x00aa", "--license-type", "3"},
+			want:        map[string]string{"codeformat": "solidity-single-file", "constructorArguments": "00aa", "optimizationUsed": "0", "licenseType": "3"},
 		},
 		{
-			name:    "abstract zk stack",
-			chain:   "abstract",
-			command: "verify-zksync",
-			flags:   []string{"--source-code", `{}`, "--codeformat", "solidity-standard-json-input", "--contractname", "C.sol:C", "--compilerversion", "v0.8.24", "--zksolc-version", "v1.5.7"},
-			want:    map[string]string{"codeformat": "solidity-standard-json-input", "zksolcVersion": "v1.5.7"},
+			name:        "solidity on mainnet",
+			chain:       "ethereum",
+			wantChainID: "1",
+			command:     "verify",
+			flags:       []string{"--source-code", "contract C {}", "--codeformat", "solidity-single-file", "--contractname", "C", "--compilerversion", "v0.8.24", "--optimization-used", "0"},
+			want:        map[string]string{"codeformat": "solidity-single-file", "optimizationUsed": "0"},
 		},
 		{
-			name:    "vyper",
-			chain:   "ethereum",
-			command: "verify-vyper",
-			flags:   []string{"--source-code", `{}`, "--contractname", "C.vy:C", "--compilerversion", "vyper:0.4.0", "--optimization-used", "1"},
-			want:    map[string]string{"codeformat": "vyper-json", "optimizationUsed": "1"},
+			name:        "abstract zk stack",
+			chain:       "abstract",
+			wantChainID: "2741",
+			command:     "verify-zksync",
+			flags:       []string{"--source-code", `{}`, "--codeformat", "solidity-standard-json-input", "--contractname", "C.sol:C", "--compilerversion", "v0.8.24", "--zksolc-version", "v1.5.7"},
+			want:        map[string]string{"codeformat": "solidity-standard-json-input", "zksolcVersion": "v1.5.7"},
 		},
 		{
-			name:    "stylus",
-			chain:   "arbitrum",
-			command: "verify-stylus",
-			flags:   []string{"--source-code", "https://github.com/example/project", "--contractname", "project", "--compilerversion", "stylus:0.5.3", "--license-type", "3"},
-			want:    map[string]string{"codeformat": "stylus", "sourceCode": "https://github.com/example/project", "licenseType": "3"},
+			name:        "vyper",
+			chain:       "ethereum",
+			wantChainID: "1",
+			command:     "verify-vyper",
+			flags:       []string{"--source-code", `{}`, "--contractname", "C.vy:C", "--compilerversion", "vyper:0.4.0", "--optimization-used", "1"},
+			want:        map[string]string{"codeformat": "vyper-json", "optimizationUsed": "1"},
+		},
+		{
+			name:        "stylus",
+			chain:       "arbitrum-sepolia",
+			wantChainID: "421614",
+			command:     "verify-stylus",
+			flags:       []string{"--source-code", "https://github.com/example/project", "--contractname", "project", "--compilerversion", "stylus:0.5.3", "--license-type", "3"},
+			want:        map[string]string{"codeformat": "stylus", "sourceCode": "https://github.com/example/project", "licenseType": "3"},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// Read the query and body separately. r.Form merges them on a POST, so
+			// an assertion built on it cannot tell which side a parameter is on —
+			// which is why chainid landing in the body went unnoticed.
 			var got url.Values
+			var query url.Values
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodPost {
 					t.Errorf("method = %s, want POST", r.Method)
 				}
-				if err := r.ParseForm(); err != nil {
+				query = r.URL.Query()
+				raw, err := io.ReadAll(r.Body)
+				if err != nil {
 					t.Fatal(err)
 				}
-				got = r.Form
+				got, err = url.ParseQuery(string(raw))
+				if err != nil {
+					t.Fatal(err)
+				}
 				fmt.Fprint(w, `{"status":"1","message":"OK","result":"guid"}`)
 			}))
 			defer server.Close()
@@ -112,12 +135,18 @@ func TestVerificationVariantsSendExpectedForm(t *testing.T) {
 			if err := root.Execute(); err != nil {
 				t.Fatal(err)
 			}
-			if got.Get("module") != "contract" || got.Get("action") != "verifysourcecode" {
-				t.Fatalf("wire endpoint = %q/%q", got.Get("module"), got.Get("action"))
+			// module/action/chainid route the request and belong in the URL.
+			if query.Get("module") != "contract" || query.Get("action") != "verifysourcecode" {
+				t.Fatalf("wire endpoint = %q/%q, want contract/verifysourcecode in the query", query.Get("module"), query.Get("action"))
+			}
+			// Etherscan routes on the query chainid; in the body it is invisible to
+			// the router and the submission is rejected on every non-default chain.
+			if got := query.Get("chainid"); got != test.wantChainID {
+				t.Errorf("query chainid = %q, want %q", got, test.wantChainID)
 			}
 			for name, want := range test.want {
 				if value := got.Get(name); value != want {
-					t.Errorf("%s = %q, want %q", name, value, want)
+					t.Errorf("body %s = %q, want %q", name, value, want)
 				}
 			}
 		})
@@ -432,22 +461,35 @@ func TestProxyAndPollWireForms(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			// got holds the endpoint parameters, which live in the body on a POST and
+			// the query on a GET. query always holds the routing parameters. Reading
+			// them apart is deliberate: r.Form merges body and query on a POST, and
+			// r.PostForm cannot see the query at all.
 			var got url.Values
+			var query url.Values
 			var method string
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				method = r.Method
+				query = r.URL.Query()
 				if r.Method == http.MethodPost {
-					_ = r.ParseForm()
-					got = r.PostForm
+					raw, err := io.ReadAll(r.Body)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if got, err = url.ParseQuery(string(raw)); err != nil {
+						t.Fatal(err)
+					}
 				} else {
-					got = r.URL.Query()
+					got = query
 				}
 				fmt.Fprint(w, `{"status":"1","message":"OK","result":"ok"}`)
 			}))
 			defer server.Close()
 
 			root := newRootCommand(BuildInfo{}, &fakeUpdateManager{})
-			args := []string{"--api-key", "TESTKEY", "--base-url", server.URL, "--yes", "contractverification"}
+			// A non-mainnet chain on purpose: chainid in the body reaches the default
+			// upstream, which serves mainnet, so a mainnet case passes even unfixed.
+			args := []string{"--api-key", "TESTKEY", "--base-url", server.URL, "--chain", "sepolia", "--yes", "contractverification"}
 			root.SetArgs(append(args, test.args...))
 			if err := root.Execute(); err != nil {
 				t.Fatal(err)
@@ -460,8 +502,13 @@ func TestProxyAndPollWireForms(t *testing.T) {
 				t.Errorf("method = %s, want %s", method, wantMethod)
 			}
 			// The wire module stays "contract" even though the CLI group does not.
-			if got.Get("module") != "contract" || got.Get("action") != test.wantAction {
-				t.Fatalf("wire endpoint = %q/%q, want contract/%s", got.Get("module"), got.Get("action"), test.wantAction)
+			// module, action and chainid route the request, so both verbs put them in
+			// the query.
+			if query.Get("module") != "contract" || query.Get("action") != test.wantAction {
+				t.Fatalf("wire endpoint = %q/%q, want contract/%s in the query", query.Get("module"), query.Get("action"), test.wantAction)
+			}
+			if chainID := query.Get("chainid"); chainID != "11155111" {
+				t.Errorf("query chainid = %q, want 11155111", chainID)
 			}
 			for name, want := range test.wantParams {
 				if value := got.Get(name); value != want {

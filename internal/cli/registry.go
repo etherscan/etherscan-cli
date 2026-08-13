@@ -31,7 +31,12 @@ type EndpointSpec struct {
 	// wire Module — the contract verification commands group under
 	// "contractverification" while still sending module=contract. It also labels
 	// the TUI sidebar. Empty means group by Module. Never sent on the wire.
-	Group              string
+	Group string
+	// RootLevel places this endpoint directly under `etherscan` instead of filing
+	// it beneath a command group, for the handful of commands that are not part of
+	// an API module's command set. It is mutually exclusive with Group: a
+	// root-level command has no parent group to be filed under.
+	RootLevel          bool
 	Action             string
 	Use                string
 	Short              string
@@ -169,7 +174,7 @@ func endpoints() []EndpointSpec {
 	out = append(out, gas...)
 	out = append(out, nametag...)
 	out = append(out, proxy...)
-	out = append(out, EndpointSpec{Module: "getapilimit", Action: "getapilimit", Use: "apilimit", Short: "Show API credit usage", Columns: []string{"creditsUsed", "creditsAvailable", "creditLimit", "limitInterval", "intervalExpiryTimespan"}})
+	out = append(out, EndpointSpec{Module: "getapilimit", RootLevel: true, Action: "getapilimit", Use: "apilimit", Short: "Show API credit usage", Columns: []string{"creditsUsed", "creditsAvailable", "creditLimit", "limitInterval", "intervalExpiryTimespan"}})
 	return out
 }
 
