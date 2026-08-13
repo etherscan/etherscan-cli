@@ -1,0 +1,23 @@
+# Git for Windows sets core.autocrlf=true in its system config, which rewrites
+# the LF blobs in this repository to CRLF on checkout. `npm pack` copies the
+# working tree rather than the committed blobs, so that CRLF reached the
+# published tarball and left scripts/install.sh unrunnable by /bin/sh on Linux
+# and macOS. Attributes take precedence over core.autocrlf, so pin the working
+# tree to LF on every platform.
+#
+# This only changes checkout. Every blob is already LF, so the raw
+# githubusercontent.com URLs used by the `curl | sh` and `irm | iex` installers
+# serve exactly the same bytes as before.
+* text=auto eol=lf
+
+# PowerShell scripts are covered by the rule above on purpose: the LF blob is
+# what the `irm | iex` installer already serves and runs in production. If a
+# Windows tool ever needs CRLF on disk, add `*.ps1 text eol=crlf` here, which
+# likewise changes only the checkout and never the stored blob.
+
+# Future-proofing; no binary files are tracked today.
+*.exe binary
+*.png binary
+*.ico binary
+*.tgz binary
+*.gz binary

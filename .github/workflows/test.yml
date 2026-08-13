@@ -89,6 +89,11 @@ jobs:
           node-version: "24"
           cache: npm
 
+      # Runs on every matrix OS. The Windows leg is the one that matters: it packs
+      # from a CRLF checkout, the combination no other job covered.
+      - name: Verify packed tarball uses LF line endings
+        run: npm run test:eol
+
       - name: Test npm package on macOS/Linux
         if: runner.os != 'Windows'
         run: sh ./scripts/test-npm.sh
