@@ -33,7 +33,7 @@ jobs:
       - name: Test
         run: |
           go test ./...
-          scripts/test-npm.sh
+          sh ./scripts/test-npm.sh
 
       - name: Vulnerability scan
         run: |
