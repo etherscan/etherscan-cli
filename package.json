@@ -19,7 +19,8 @@
     "postinstall": "node npm/postinstall.js",
     "prepublishOnly": "node npm/prepublish-check.js",
     "test:package": "npm pack --dry-run",
-    "test:release": "node npm/publish.test.js"
+    "test:release": "node npm/publish.test.js",
+    "test:eol": "node npm/check-tarball-eol.js"
   },
   "files": [
     "npm/bin/etherscan.js",
