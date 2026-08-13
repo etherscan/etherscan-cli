@@ -1,5 +1,5 @@
 {
-  "name": "@etherscan/cli",
+  "name": "@etherscan-npm/cli",
   "version": "0.0.0-development",
   "description": "Command-line client and interactive explorer for the Etherscan V2 API",
   "license": "MIT",
@@ -16,7 +16,6 @@
     "etherscan": "npm/bin/etherscan.js"
   },
   "scripts": {
-    "postinstall": "node npm/postinstall.js",
     "prepublishOnly": "node npm/prepublish-check.js",
     "test:package": "npm pack --dry-run",
     "test:release": "node npm/publish.test.js",
@@ -24,13 +23,18 @@
   },
   "files": [
     "npm/bin/etherscan.js",
-    "npm/postinstall.js",
-    "npm/prepublish-check.js",
-    "scripts/install.sh",
-    "scripts/install.ps1",
+    "npm/platform.js",
     "README.md",
     "LICENSE"
   ],
+  "optionalDependencies": {
+    "@etherscan-npm/cli-darwin-arm64": "0.0.0-development",
+    "@etherscan-npm/cli-darwin-x64": "0.0.0-development",
+    "@etherscan-npm/cli-linux-arm64": "0.0.0-development",
+    "@etherscan-npm/cli-linux-x64": "0.0.0-development",
+    "@etherscan-npm/cli-win32-arm64": "0.0.0-development",
+    "@etherscan-npm/cli-win32-x64": "0.0.0-development"
+  },
   "engines": {
     "node": ">=18"
   },

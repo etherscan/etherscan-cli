@@ -36,22 +36,25 @@ func TestNPMPackageNameWithoutMarkerFailsClosed(t *testing.T) {
 	}
 }
 
+type npmOwnershipCase struct {
+	name       string
+	executable string
+	want       string
+	ok         bool
+}
+
 func TestNPMPackageFromExecutable(t *testing.T) {
 	t.Setenv("ETHERSCAN_INSTALL_METHOD", "")
-	tests := []struct {
-		name       string
-		executable string
-		want       string
-		ok         bool
-	}{
+	tests := []npmOwnershipCase{
+		// Legacy <=1.0.3 layout: the binary was vendored inside the umbrella.
 		{
-			name:       "canonical package",
+			name:       "canonical package legacy vendor layout",
 			executable: filepath.Join("C:", "Users", "test", "node_modules", "@etherscan", "cli", "vendor", "etherscan.exe"),
 			want:       NPMCanonicalPackage,
 			ok:         true,
 		},
 		{
-			name:       "transitional package",
+			name:       "transitional package legacy vendor layout",
 			executable: filepath.Join("usr", "local", "lib", "node_modules", "@etherscan-npm", "cli", "vendor", "etherscan"),
 			want:       NPMTransitionalPackage,
 			ok:         true,
@@ -61,9 +64,42 @@ func TestNPMPackageFromExecutable(t *testing.T) {
 			executable: filepath.Join("usr", "local", "lib", "node_modules", "@etherscan", "cli-malicious", "vendor", "etherscan"),
 		},
 		{
+			name:       "lookalike platform package",
+			executable: filepath.Join("usr", "local", "lib", "node_modules", "@etherscan-npm", "cli-linux-x64-malicious", "etherscan"),
+		},
+		{
+			name:       "unrelated scoped package",
+			executable: filepath.Join("usr", "local", "lib", "node_modules", "@other", "cli", "etherscan"),
+		},
+		{
 			name:       "manual install",
 			executable: filepath.Join("usr", "local", "bin", "etherscan"),
 		},
+	}
+
+	// Since 1.0.4 the binary ships in a platform package beside the umbrella. Every
+	// one of them must classify as npm-owned and report the umbrella, never itself.
+	for _, scope := range []struct {
+		directory string
+		umbrella  string
+	}{
+		{directory: "@etherscan", umbrella: NPMCanonicalPackage},
+		{directory: "@etherscan-npm", umbrella: NPMTransitionalPackage},
+	} {
+		for _, platform := range []string{
+			"darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "win32-arm64", "win32-x64",
+		} {
+			binary := "etherscan"
+			if strings.HasPrefix(platform, "win32") {
+				binary = "etherscan.exe"
+			}
+			tests = append(tests, npmOwnershipCase{
+				name:       scope.directory + "/cli-" + platform,
+				executable: filepath.Join("usr", "local", "lib", "node_modules", scope.directory, "cli-"+platform, binary),
+				want:       scope.umbrella,
+				ok:         true,
+			})
+		}
 	}
 
 	for _, test := range tests {

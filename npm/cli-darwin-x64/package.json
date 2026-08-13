@@ -1,0 +1,14 @@
+{
+  "name": "@etherscan-npm/cli-darwin-x64",
+  "version": "0.0.0-development",
+  "description": "Etherscan CLI for macOS x64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/etherscan/etherscan-cli.git"
+  },
+  "os": ["darwin"],
+  "cpu": ["x64"],
+  "files": ["etherscan"],
+  "publishConfig": { "access": "public" }
+}

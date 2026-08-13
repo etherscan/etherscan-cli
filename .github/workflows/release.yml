@@ -24,8 +24,16 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
       - name: Test
-        run: go test ./...
+        run: |
+          go test ./...
+          sh ./scripts/test-npm.sh
 
       - name: Vulnerability scan
         run: |
@@ -40,6 +48,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Save npm release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-release-assets
+          path: |
+            dist/etherscan_*.tar.gz
+            dist/etherscan_*.zip
+            dist/checksums.txt
+          if-no-files-found: error
 
   npm:
     if: vars.NPM_PUBLISH_ENABLED == 'true'
@@ -62,5 +80,13 @@ jobs:
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
+      - name: Download npm release assets
+        uses: actions/download-artifact@v5
+        with:
+          name: npm-release-assets
+          path: dist
+
       - name: Publish npm package
         run: node npm/publish.js
+        env:
+          NPM_PROVENANCE: "true"

@@ -1,0 +1,14 @@
+{
+  "name": "@etherscan-npm/cli-win32-x64",
+  "version": "0.0.0-development",
+  "description": "Etherscan CLI for Windows x64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/etherscan/etherscan-cli.git"
+  },
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "files": ["etherscan.exe"],
+  "publishConfig": { "access": "public" }
+}

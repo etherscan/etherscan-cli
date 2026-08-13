@@ -1,0 +1,14 @@
+{
+  "name": "@etherscan-npm/cli-linux-arm64",
+  "version": "0.0.0-development",
+  "description": "Etherscan CLI for Linux ARM64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/etherscan/etherscan-cli.git"
+  },
+  "os": ["linux"],
+  "cpu": ["arm64"],
+  "files": ["etherscan"],
+  "publishConfig": { "access": "public" }
+}

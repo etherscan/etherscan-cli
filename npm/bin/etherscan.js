@@ -3,22 +3,45 @@
 "use strict";
 
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const packageInfo = require("../../package.json");
+const { PLATFORMS, platformPackage } = require("../platform");
 
 const packageRoot = path.resolve(__dirname, "..", "..");
-const executable = path.join(
-  packageRoot,
-  "vendor",
-  process.platform === "win32" ? "etherscan.exe" : "etherscan",
-);
+
+// Resolve these once so the package lookup and executable name cannot disagree.
+const platform = os.platform();
+const arch = os.arch();
+const binaryName = platform === "win32" ? "etherscan.exe" : "etherscan";
+const reinstallHint = `Reinstall ${packageInfo.name} without --omit=optional.`;
+
+function getExecutable() {
+  const packageName = platformPackage(platform, arch);
+  if (!packageName) {
+    console.error(
+      `Etherscan CLI does not support ${platform} ${arch}. ` +
+        `Supported platforms: ${Object.keys(PLATFORMS).join(", ")}.`,
+    );
+    process.exit(1);
+  }
+
+  try {
+    const manifest = require.resolve(`${packageName}/package.json`, {
+      paths: [packageRoot],
+    });
+    return path.join(path.dirname(manifest), binaryName);
+  } catch {
+    console.error(`The platform package ${packageName} is not installed. ${reinstallHint}`);
+    process.exit(1);
+  }
+}
+
+const executable = getExecutable();
 
 if (!fs.existsSync(executable)) {
-  console.error(
-    "Etherscan CLI is not installed in this npm package. " +
-      "Reinstall @etherscan/cli without --ignore-scripts.",
-  );
+  console.error(`The platform package executable is missing: ${executable}. ${reinstallHint}`);
   process.exit(1);
 }
 
