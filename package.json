@@ -1,7 +1,24 @@
 {
   "name": "@etherscan-npm/cli",
   "version": "0.0.0-development",
-  "description": "Command-line client and interactive explorer for the Etherscan V2 API",
+  "description": "Official command-line interface for the Etherscan API V2. Query EVM blockchain data, inspect transactions, and verify smart contracts.",
+  "keywords": [
+    "etherscan",
+    "etherscan-cli",
+    "etherscan-api",
+    "ethereum",
+    "evm",
+    "blockchain",
+    "block-explorer",
+    "cli",
+    "command-line",
+    "smart-contract",
+    "contract-verification",
+    "source-code-verification",
+    "transactions",
+    "abi",
+    "multichain"
+  ],
   "license": "MIT",
   "homepage": "https://github.com/etherscan/etherscan-cli",
   "repository": {
