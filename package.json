@@ -1,7 +1,7 @@
 {
   "name": "@etherscan-npm/cli",
   "version": "0.0.0-development",
-  "description": "Official command-line interface for the Etherscan API V2. Query EVM blockchain data, inspect transactions, and verify smart contracts.",
+  "description": "Etherscan CLI — the official command-line interface (CLI) for the Etherscan API V2. Query EVM blockchain data, inspect transactions, and verify smart contracts.",
   "keywords": [
     "etherscan",
     "etherscan-cli",
