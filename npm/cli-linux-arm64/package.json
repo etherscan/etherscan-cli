@@ -1,7 +1,7 @@
 {
   "name": "@etherscan-npm/cli-linux-arm64",
   "version": "0.0.0-development",
-  "description": "Etherscan CLI for Linux ARM64",
+  "description": "Linux ARM64 binary for @etherscan-npm/cli. Installed automatically as an optional dependency; do not install directly.",
   "license": "MIT",
   "repository": {
     "type": "git",
