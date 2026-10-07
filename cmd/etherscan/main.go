@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/etherscan/etherscan-cli/internal/cli"
+	"github.com/etherscan/etherscan-cli/internal/output"
 )
 
 // These are overridden at release time via -ldflags (see .goreleaser.yaml). A
@@ -26,7 +27,7 @@ func main() {
 
 	root := cli.NewRootCommand(buildInfo())
 	if err := root.ExecuteContext(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		fmt.Fprintln(os.Stderr, "error:", output.Sanitize(err.Error()))
 		os.Exit(1)
 	}
 }

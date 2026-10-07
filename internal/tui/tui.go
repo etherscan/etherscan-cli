@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -227,6 +228,10 @@ type model struct {
 	keyErr    string
 	keyReturn viewState
 
+	// surrogate holds the first half of a UTF-16 surrogate pair until the second
+	// half arrives (see joinSurrogates).
+	surrogate rune
+
 	width, height int
 	ready         bool
 }
@@ -299,7 +304,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case apiKeySavedMsg:
 		m.keySaving = false
 		if msg.err != nil {
-			m.keyErr = msg.err.Error()
+			m.keyErr = output.Sanitize(msg.err.Error())
 			m.keyInput.Focus()
 			return m, textinput.Blink
 		}
@@ -336,6 +341,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	msg, ok := m.joinSurrogates(msg)
+	if !ok {
+		return m, nil
+	}
 	switch m.state {
 	case stateBrowse:
 		return m.keyBrowse(msg)
@@ -354,6 +363,42 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyAPIKey(msg)
 	}
 	return m, nil
+}
+
+// joinSurrogates reassembles characters outside the Basic Multilingual Plane
+// (emoji such as 🔥) that arrive split on Windows. Bubble Tea v1 reads console
+// input through coninput, which delivers one UTF-16 code unit per key event, so
+// each half of a surrogate pair reaches us as its own KeyMsg and textinput would
+// store both as U+FFFD. This mirrors the fix in Bubble Tea v2's input reader
+// (charmbracelet/ultraviolet) and can be removed when migrating to v2. It reports
+// false when the message only carried a buffered first half.
+func (m *model) joinSurrogates(msg tea.KeyMsg) (tea.KeyMsg, bool) {
+	if msg.Type != tea.KeyRunes {
+		m.surrogate = 0
+		return msg, true
+	}
+	runes := make([]rune, 0, len(msg.Runes))
+	for _, r := range msg.Runes {
+		switch {
+		case r >= 0xD800 && r < 0xDC00:
+			// High (first) half: wait for its low half, replacing any stray one.
+			m.surrogate = r
+		case r >= 0xDC00 && r < 0xE000:
+			// Low (second) half: only meaningful right after a high half.
+			if m.surrogate != 0 {
+				runes = append(runes, utf16.DecodeRune(m.surrogate, r))
+			}
+			m.surrogate = 0
+		default:
+			m.surrogate = 0
+			runes = append(runes, r)
+		}
+	}
+	if len(runes) == 0 {
+		return msg, false
+	}
+	msg.Runes = runes
+	return msg, true
 }
 
 func (m *model) keyBrowse(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -695,17 +740,17 @@ func (m *model) keyChainPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *model) setResult(raw json.RawMessage, err error) {
 	m.state = stateResult
 	if err != nil {
-		m.setContent(errSt.Render("error: " + err.Error()))
+		m.setContent(errSt.Render("error: " + output.Sanitize(err.Error())))
 		return
 	}
 	rows, scalar, rerr := output.Rows(raw)
 	if rerr != nil {
-		m.setContent(errSt.Render("error: " + rerr.Error()))
+		m.setContent(errSt.Render("error: " + output.Sanitize(rerr.Error())))
 		return
 	}
 	if len(rows) == 0 {
 		if strings.TrimSpace(scalar) != "" {
-			m.setContent(scalar)
+			m.setContent(output.Sanitize(scalar))
 		} else {
 			m.setContent(descSt.Render("(no data)"))
 		}
@@ -713,7 +758,7 @@ func (m *model) setResult(raw json.RawMessage, err error) {
 	}
 	var buf bytes.Buffer
 	if werr := output.WriteRows(&buf, rows, output.Table, m.current.Columns); werr != nil {
-		m.setContent(errSt.Render("error: " + werr.Error()))
+		m.setContent(errSt.Render("error: " + output.Sanitize(werr.Error())))
 		return
 	}
 	m.setContent(strings.TrimRight(buf.String(), "\n"))

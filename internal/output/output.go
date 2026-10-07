@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/olekukonko/tablewriter"
 )
@@ -50,8 +52,12 @@ func Write(w io.Writer, raw json.RawMessage, format Format, compact bool, column
 			}
 			return err
 		}
+		// UseNumber keeps numeric literals exact: decoding into float64 would round
+		// integers above 2^53 and rewrite decimals such as 1.50 as 1.5.
 		var v any
-		if err := json.Unmarshal(raw, &v); err != nil {
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.UseNumber()
+		if err := dec.Decode(&v); err != nil {
 			return err
 		}
 		enc := json.NewEncoder(w)
@@ -64,7 +70,7 @@ func Write(w io.Writer, raw json.RawMessage, format Format, compact bool, column
 		return err
 	}
 	if scalar != "" {
-		_, err := fmt.Fprintln(w, scalar)
+		_, err := fmt.Fprintln(w, Sanitize(scalar))
 		return err
 	}
 	if format == CSV {
@@ -120,8 +126,12 @@ func writeTable(w io.Writer, rows []map[string]string, preferred []string) error
 		return nil
 	}
 	cols := columns(rows, preferred)
+	header := make([]string, len(cols))
+	for i, col := range cols {
+		header[i] = Sanitize(col)
+	}
 	t := tablewriter.NewWriter(w)
-	t.SetHeader(cols)
+	t.SetHeader(header)
 	t.SetAutoWrapText(false)
 	t.SetAlignment(tablewriter.ALIGN_LEFT)
 	t.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
@@ -149,13 +159,17 @@ func writeCSV(w io.Writer, rows []map[string]string, preferred []string) error {
 	}
 	cols := columns(rows, preferred)
 	cw := csv.NewWriter(w)
-	if err := cw.Write(cols); err != nil {
+	header := make([]string, len(cols))
+	for i, col := range cols {
+		header[i] = Sanitize(col)
+	}
+	if err := cw.Write(header); err != nil {
 		return err
 	}
 	for _, row := range rows {
 		record := make([]string, len(cols))
 		for i, col := range cols {
-			record[i] = row[col]
+			record[i] = Sanitize(row[col])
 		}
 		if err := cw.Write(record); err != nil {
 			return err
@@ -228,6 +242,7 @@ func formatScalar(value string) string {
 }
 
 func formatTableCell(column, value string) string {
+	value = Sanitize(value)
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
 		return value
@@ -254,4 +269,33 @@ func formatTableCell(column, value string) string {
 		return trimmed[:77] + "..."
 	}
 	return value
+}
+
+// Sanitize replaces control characters in API-derived text with U+FFFD before it is
+// written to a terminal. Token names and symbols are chosen by whoever deploys the
+// contract, so a raw ESC could smuggle in an escape sequence such as OSC 52, which
+// many terminals honour as "overwrite the clipboard". Whitespace controls (tab,
+// newline, vertical tab, form feed, carriage return) are kept: they cannot start an
+// escape sequence and occur in real data such as contract source code. JSON output
+// does not need this, because the encoder escapes every control character.
+func Sanitize(s string) string {
+	if utf8.ValidString(s) && strings.IndexFunc(s, unsafeControl) < 0 {
+		return s
+	}
+	// strings.Map also turns invalid UTF-8 bytes into U+FFFD, which covers a lone
+	// 8-bit C1 byte such as 0x9b (CSI).
+	return strings.Map(func(r rune) rune {
+		if unsafeControl(r) {
+			return utf8.RuneError
+		}
+		return r
+	}, s)
+}
+
+func unsafeControl(r rune) bool {
+	switch r {
+	case '\t', '\n', '\v', '\f', '\r':
+		return false
+	}
+	return unicode.IsControl(r)
 }

@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"unicode/utf16"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -487,6 +488,85 @@ func TestFormValidateHookInline(t *testing.T) {
 	}
 	if m.state != stateFetching || m.formErr != "" {
 		t.Fatalf("expected clean fetch, got state=%v err=%q", m.state, m.formErr)
+	}
+}
+
+// typeUTF16 replays s the way Bubble Tea v1 delivers console input on Windows:
+// one KeyMsg per UTF-16 code unit, so emoji arrive as two lone surrogate halves.
+func typeUTF16(m *model, s string) {
+	for _, u := range utf16.Encode([]rune(s)) {
+		m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{rune(u)}})
+	}
+}
+
+// TestFormJoinsWindowsSurrogatePairs: emoji typed or terminal-pasted on Windows
+// reach the form field intact instead of as U+FFFD replacement characters.
+func TestFormJoinsWindowsSurrogatePairs(t *testing.T) {
+	const name = "\U0001F468‍\U0001F4BB.eth" // 👨‍💻.eth, a ZWJ sequence
+	open := func() *model {
+		m := testModel(nil)
+		m.modIdx, m.focus, m.epIdx = 0, focusEndpoints, 0
+		m.openSelected()
+		if m.state != stateForm {
+			t.Fatalf("expected form, got %v", m.state)
+		}
+		return m
+	}
+
+	m := open()
+	typeUTF16(m, name)
+	if got := m.inputs[0].Value(); got != name {
+		t.Fatalf("split units: value = %q, want %q", got, name)
+	}
+
+	// Both halves in one message (a key event with RepeatCount > 1 is split the same way).
+	m = open()
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{0xD83D, 0xDD25}})
+	if got := m.inputs[0].Value(); got != "\U0001F525" {
+		t.Fatalf("one message: value = %q, want 🔥", got)
+	}
+
+	// A dangling first half is dropped rather than corrupting the next character.
+	m = open()
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{0xD83D}})
+	typeRunes(m, "a")
+	if got := m.inputs[0].Value(); got != "a" {
+		t.Fatalf("dangling half: value = %q, want %q", got, "a")
+	}
+	// A stray half never swallows the valid pair that follows it: a repeated high
+	// half replaces the pending one, and an orphan low half is discarded.
+	for _, units := range [][]rune{{0xD83D, 0xD83D, 0xDD25}, {0xDD25, 0xD83D, 0xDD25}} {
+		m = open()
+		for _, u := range units {
+			m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{u}})
+		}
+		if got := m.inputs[0].Value(); got != "\U0001F525" {
+			t.Fatalf("units % X: value = %q, want 🔥", units, got)
+		}
+		m = open()
+		m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: units})
+		if got := m.inputs[0].Value(); got != "\U0001F525" {
+			t.Fatalf("units % X in one message: value = %q, want 🔥", units, got)
+		}
+	}
+
+	// A non-rune key also discards a pending half.
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{0xD83D}})
+	m.handleKey(tea.KeyMsg{Type: tea.KeyLeft})
+	typeRunes(m, "b")
+	if strings.ContainsRune(m.inputs[0].Value(), '�') {
+		t.Fatalf("pending half leaked after a non-rune key: %q", m.inputs[0].Value())
+	}
+}
+
+// TestChainPickerFilterJoinsWindowsSurrogatePairs: the chain filter reads runes
+// straight from KeyMsg, so it gets the same reassembly as form inputs.
+func TestChainPickerFilterJoinsWindowsSurrogatePairs(t *testing.T) {
+	m := chainPickerModel(func(string) (string, string, error) { return "", "", nil })
+	typeRunes(m, "c")
+	typeUTF16(m, "\U0001F525")
+	if m.chainFilter != "\U0001F525" {
+		t.Fatalf("chain filter = %q, want 🔥", m.chainFilter)
 	}
 }
 
