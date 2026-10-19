@@ -128,7 +128,7 @@ func writeTable(w io.Writer, rows []map[string]string, preferred []string) error
 	cols := columns(rows, preferred)
 	header := make([]string, len(cols))
 	for i, col := range cols {
-		header[i] = Sanitize(col)
+		header[i] = collapseWhitespace(Sanitize(col))
 	}
 	t := tablewriter.NewWriter(w)
 	t.SetHeader(header)
@@ -247,13 +247,10 @@ func formatTableCell(column, value string) string {
 	if trimmed == "" {
 		return value
 	}
-	// Cell values may contain newlines (contract SourceCode is the worst case). writeTable
-	// runs with SetAutoWrapText(false), so an unsanitised newline splits one logical row
-	// across several physical lines and misaligns every following column. Collapse runs of
-	// whitespace before the truncation rules below, which would otherwise keep newlines
-	// that happen to fall inside the retained prefix.
-	if strings.ContainsAny(trimmed, "\r\n\t\v\f") {
-		trimmed = strings.Join(strings.Fields(trimmed), " ")
+	// Collapse before the truncation rules below, which would otherwise keep newlines that
+	// happen to fall inside the retained prefix.
+	if collapsed := collapseWhitespace(trimmed); collapsed != trimmed {
+		trimmed = collapsed
 		value = trimmed
 	}
 	switch strings.ToLower(column) {
@@ -271,12 +268,26 @@ func formatTableCell(column, value string) string {
 	return value
 }
 
+// collapseWhitespace turns each run of whitespace in a table cell or header into one
+// space. Cell values may contain newlines (contract SourceCode is the worst case), and
+// writeTable runs with SetAutoWrapText(false), so a newline would split one logical row
+// across several physical lines and misalign every following column. It also covers the
+// whitespace controls Sanitize keeps: a token name such as "USDC\rFAKE" would otherwise
+// return the cursor to column 0 and overwrite the columns printed before it.
+func collapseWhitespace(s string) string {
+	if !strings.ContainsAny(s, "\r\n\t\v\f") {
+		return s
+	}
+	return strings.Join(strings.Fields(s), " ")
+}
+
 // Sanitize replaces control characters in API-derived text with U+FFFD before it is
 // written to a terminal. Token names and symbols are chosen by whoever deploys the
 // contract, so a raw ESC could smuggle in an escape sequence such as OSC 52, which
 // many terminals honour as "overwrite the clipboard". Whitespace controls (tab,
 // newline, vertical tab, form feed, carriage return) are kept: they cannot start an
-// escape sequence and occur in real data such as contract source code. JSON output
+// escape sequence and occur in real data such as contract source code. Table output
+// additionally collapses them to spaces (see collapseWhitespace). JSON output
 // does not need this, because the encoder escapes every control character.
 func Sanitize(s string) string {
 	if utf8.ValidString(s) && strings.IndexFunc(s, unsafeControl) < 0 {

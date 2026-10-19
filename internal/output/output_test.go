@@ -86,6 +86,29 @@ func TestJSONOutputKeepsEscapedControls(t *testing.T) {
 	}
 }
 
+// Sanitize keeps whitespace controls, so tables must collapse them. A token name such as
+// "USDC\rFAKE" would otherwise return the cursor to column 0 and overwrite the address
+// printed before it.
+func TestTableCollapsesCursorControls(t *testing.T) {
+	for _, ctl := range []string{"\r", "\v", "\f", "\n", "\r\n"} {
+		raw := `[{"to":"0xabc","tokenName":"USDC` + jsonEscape(ctl) + `FAKE","na` + jsonEscape(ctl) + `me":"x"}]`
+		var buf bytes.Buffer
+		if err := Write(&buf, []byte(raw), Table, false, nil); err != nil {
+			t.Fatal(err)
+		}
+		out := buf.String()
+		if i := strings.IndexAny(strings.TrimSuffix(out, "\n"), "\r\v\f"); i >= 0 {
+			t.Fatalf("%q: cursor control at byte %d:\n%q", ctl, i, out)
+		}
+		if lines := strings.Split(strings.TrimSuffix(out, "\n"), "\n"); len(lines) != 2 {
+			t.Fatalf("%q: want header + 1 row, got %d lines:\n%q", ctl, len(lines), out)
+		}
+		if !strings.Contains(out, "NA ME") || !strings.Contains(out, "0xabc") || !strings.Contains(out, "USDC FAKE") {
+			t.Fatalf("%q: want header \"NA ME\" and cell \"USDC FAKE\":\n%q", ctl, out)
+		}
+	}
+}
+
 func TestSanitizeKeepsWhitespaceAndText(t *testing.T) {
 	for _, s := range []string{"pragma solidity ^0.8.0;\r\n\tcontract A {}\n", "page\fbreak\vtab", "👨‍💻.eth", "Ünïcödé", ""} {
 		if got := Sanitize(s); got != s {
