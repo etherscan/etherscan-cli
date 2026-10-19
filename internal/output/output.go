@@ -242,16 +242,14 @@ func formatScalar(value string) string {
 }
 
 func formatTableCell(column, value string) string {
-	value = Sanitize(value)
+	// Collapse the whole value before anything else: an early return or a trimmed copy
+	// would let a whitespace-only cell, or one with a leading or trailing "\r", through
+	// raw. Doing it before the truncation rules below also stops them from keeping
+	// newlines that happen to fall inside the retained prefix.
+	value = collapseWhitespace(Sanitize(value))
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
 		return value
-	}
-	// Collapse before the truncation rules below, which would otherwise keep newlines that
-	// happen to fall inside the retained prefix.
-	if collapsed := collapseWhitespace(trimmed); collapsed != trimmed {
-		trimmed = collapsed
-		value = trimmed
 	}
 	switch strings.ToLower(column) {
 	case "timestamp", "timestampunix", "time_stamp":

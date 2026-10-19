@@ -106,6 +106,22 @@ func TestTableCollapsesCursorControls(t *testing.T) {
 		if !strings.Contains(out, "NA ME") || !strings.Contains(out, "0xabc") || !strings.Contains(out, "USDC FAKE") {
 			t.Fatalf("%q: want header \"NA ME\" and cell \"USDC FAKE\":\n%q", ctl, out)
 		}
+		// A control alone, or at either edge of a cell, must not survive the trimming
+		// formatTableCell does before its other rules.
+		for _, v := range []string{ctl, " " + ctl + " ", ctl + "FAKE", "USDC" + ctl} {
+			if got := formatTableCell("tokenName", v); strings.ContainsAny(got, "\r\n\v\f") {
+				t.Errorf("formatTableCell(%q) = %q, want no whitespace controls", v, got)
+			}
+		}
+	}
+
+	// Review repro: a whitespace-only name let the next column overwrite the address.
+	var buf bytes.Buffer
+	if err := Write(&buf, []byte(`[{"to":"0xabc","tokenName":"\r","tokenSymbol":"USDC"}]`), Table, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if out := strings.TrimSuffix(buf.String(), "\n"); strings.Contains(out, "\r") || strings.Count(out, "\n") != 1 {
+		t.Fatalf("whitespace-only cell reached the table raw:\n%q", buf.String())
 	}
 }
 
