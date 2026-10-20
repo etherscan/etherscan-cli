@@ -94,17 +94,35 @@ Download the archive for your operating system and architecture plus `checksums.
 
 ## Uninstall
 
-Run:
+### CLI uninstaller
 
 ```sh
 etherscan uninstall
 ```
 
-The command shows the exact package-manager action or executable and configuration paths before asking for confirmation. Use `--yes` to skip the prompt. Homebrew and npm installations are removed through their owning package manager. Installer, Go, manual, and source builds remove only the exact running executable; custom directories and `PATH` entries are left alone unless the installer recorded that it added them and the directory contains no other files.
+- Removes the CLI and saved configuration, including the API key in `config.toml`.
+- Shows what will be removed and asks for confirmation. Add `--yes` to skip the prompt.
+- Uses Homebrew/npm for managed installs; otherwise removes the running binary.
+- Cleans up unused installer-managed directories and `PATH` entries. Remove custom aliases and symlinks yourself.
+- Never requests admin privileges. For protected binaries, prints a manual removal command and keeps configuration intact.
+- Unset the `ETHERSCAN_API_KEY` environment variable separately wherever it is defined.
 
-The command never requests administrator privileges. If a manually copied binary is in a protected location, it leaves the saved configuration intact and prints the exact command needed to remove the binary. Manually created aliases or separate symlinks may also need to be removed by hand.
+### Homebrew and npm
 
-The installer scripts can remove a script installation without downloading a release archive:
+```sh
+brew uninstall etherscan/etherscan-cli/etherscan
+```
+
+```sh
+npm uninstall -g @etherscan/cli
+```
+
+- Removes the package only; leaves `config.toml` and its API key behind.
+- Use `etherscan uninstall` instead to remove both the CLI and saved configuration.
+
+### Installation scripts
+
+For script installations, uninstall without downloading a release archive:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/etherscan/etherscan-cli/master/scripts/install.sh | sh -s -- --uninstall
@@ -114,7 +132,7 @@ curl -fsSL https://raw.githubusercontent.com/etherscan/etherscan-cli/master/scri
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/etherscan/etherscan-cli/master/scripts/install.ps1))) -Uninstall
 ```
 
-Uninstall removes the saved configuration directory. If `ETHERSCAN_API_KEY` is set, unset it separately in the shell or environment where it is defined.
+- Unset the `ETHERSCAN_API_KEY` environment variable separately wherever it is defined.
 
 ## Get started
 
