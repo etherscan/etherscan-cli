@@ -397,6 +397,12 @@ Grouped separately from the contract data commands above. All of these call the 
 | `etherscan gastracker oracle` | Get safe, proposed, and fast gas prices | [gasoracle](https://docs.etherscan.io/api-reference/endpoint/gasoracle.md) |
 | `etherscan gastracker estimate` | Estimate confirmation time for a gas price | [gasestimate](https://docs.etherscan.io/api-reference/endpoint/gasestimate.md) |
 
+### ENS
+
+| Command | Description | API docs |
+| --- | --- | --- |
+| `etherscan ens forwardresolve` | Resolve an ENS name to its address (Ethereum mainnet) | [forwardresolve](https://docs.etherscan.io/api-reference/endpoint/forwardresolve.md) |
+
 ### Nametag
 
 | Command | Description | API docs |

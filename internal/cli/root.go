@@ -199,7 +199,7 @@ func endpointCommand(state *globalState, spec EndpointSpec) *cobra.Command {
 				}
 			}
 			if state.all && spec.Paginated {
-				return runAllPages(cmd.Context(), rt, spec, params, state.maxPages)
+				return runAllPages(cmd.Context(), rt, spec, params, state.maxPages, state.compact)
 			}
 			if err := validatePagination(spec, params); err != nil {
 				return err
@@ -381,13 +381,16 @@ func call(ctx context.Context, c *client.Client, spec EndpointSpec, params map[s
 	return c.Get(ctx, spec.Module, spec.Action, clean, !spec.NoRetry)
 }
 
-func runAllPages(ctx context.Context, rt resolvedRuntime, spec EndpointSpec, params map[string]string, maxPages int) error {
+func runAllPages(ctx context.Context, rt resolvedRuntime, spec EndpointSpec, params map[string]string, maxPages int, compact bool) error {
 	offset := params["offset"]
 	if offset == "" {
 		offset = "100"
 		params["offset"] = offset
 	}
-	var combined []map[string]string
+	// Rows stay raw JSON so the combined output matches a single-page call. Converting
+	// them to display rows here would turn arrays (getLogs topics), numbers, booleans
+	// and nulls into strings; output.Write does that conversion for table and CSV only.
+	var combined []json.RawMessage
 	reachedEnd := false
 	limit := max(1, maxPages)
 	for page := 1; page <= limit; page++ {
@@ -396,12 +399,10 @@ func runAllPages(ctx context.Context, rt resolvedRuntime, spec EndpointSpec, par
 		if err != nil {
 			return err
 		}
-		rows, scalar, err := output.Rows(result.Raw)
-		if err != nil {
-			return err
-		}
-		if scalar != "" {
-			return output.Write(os.Stdout, result.Raw, rt.format, false, spec.Columns)
+		var rows []json.RawMessage
+		if err := json.Unmarshal(result.Raw, &rows); err != nil {
+			// Not a list (e.g. a scalar message): print it as a single call would.
+			return output.Write(os.Stdout, result.Raw, rt.format, compact, spec.Columns)
 		}
 		combined = append(combined, rows...)
 		fmt.Fprintf(os.Stderr, "fetched page %d (%d rows)\n", page, len(rows))
@@ -417,7 +418,7 @@ func runAllPages(ctx context.Context, rt resolvedRuntime, spec EndpointSpec, par
 	if err != nil {
 		return err
 	}
-	return output.Write(os.Stdout, raw, rt.format, false, spec.Columns)
+	return output.Write(os.Stdout, raw, rt.format, compact, spec.Columns)
 }
 
 // validateKeyLive checks a key against the API (getapilimit) before it is saved,
@@ -1011,7 +1012,7 @@ func tuiExec(rt *resolvedRuntime, index map[string]EndpointSpec) tui.Exec {
 // cross-reference the docs; the CLI command tree is unaffected.
 var tuiModuleOrder = []string{
 	"account", "block", "contract", "verification", "gastracker", "proxy",
-	"logs", "stats", "transaction", "token", "nametag", "usage",
+	"logs", "stats", "transaction", "token", "ens", "nametag", "usage",
 }
 
 // tuiGroupLabel maps a CLI command group to its sidebar label where the two differ.
@@ -1081,6 +1082,7 @@ var tuiActionOrder = map[string][]string{
 	},
 	"transaction": {"getstatus", "gettxreceiptstatus"},
 	"token":       {"topholders", "tokenholderlist", "tokenholdercount", "tokeninfo"},
+	"ens":         {"forwardresolve"},
 	"usage":       {"getapilimit", "chainlist"},
 }
 

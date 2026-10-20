@@ -89,6 +89,7 @@ var groupMetaOverride = map[string]groupMeta{
 		hint: "contract verification commands moved to \"etherscan contractverification\"",
 	},
 	"contractverification": {short: "Etherscan contract verification commands"},
+	"ens":                  {short: "Etherscan ENS name resolution commands"},
 }
 
 // groupShort returns the parent command's Short description for a CLI group.
@@ -160,6 +161,9 @@ func endpoints() []EndpointSpec {
 		{Module: "token", Action: "tokenholdercount", Use: "tokenholdercount <contract>", Short: "Get token holder count", Params: []ParamSpec{arg("contractaddress", "token contract", KindAddress)}},
 		{Module: "token", Action: "topholders", Use: "topholders <contract>", Short: "Get top holders", Params: []ParamSpec{arg("contractaddress", "token contract", KindAddress), p("offset", "limit", KindUint)}},
 	}
+	ens := []EndpointSpec{
+		{Module: "ens", Action: "forwardresolve", Use: "forwardresolve <name>", Short: "Resolve an ENS name to an address", Params: []ParamSpec{arg("name", "ENS name, e.g. etherscan.eth", KindString)}, MainnetOnly: true},
+	}
 	nametag := []EndpointSpec{
 		{Module: "nametag", Action: "getaddresstag", Use: "getaddresstag <addr1,addr2,...>", Short: "Get address name tags and metadata (Pro Plus)", Params: []ParamSpec{argAddresses("address", 100)}, Columns: []string{"address", "nametag", "labels", "reputation"}},
 	}
@@ -172,6 +176,7 @@ func endpoints() []EndpointSpec {
 	out = append(out, stats...)
 	out = append(out, token...)
 	out = append(out, gas...)
+	out = append(out, ens...)
 	out = append(out, nametag...)
 	out = append(out, proxy...)
 	out = append(out, EndpointSpec{Module: "getapilimit", RootLevel: true, Action: "getapilimit", Use: "apilimit", Short: "Show API credit usage", Columns: []string{"creditsUsed", "creditsAvailable", "creditLimit", "limitInterval", "intervalExpiryTimespan"}})
