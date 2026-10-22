@@ -80,7 +80,7 @@ The installer selects the correct x64 or arm64 archive, verifies its SHA-256 che
 
 ### Go
 
-Go 1.25 or newer is required.
+Go 1.26.10 or newer is required.
 
 ```sh
 go install github.com/etherscan/etherscan-cli/cmd/etherscan@latest
@@ -500,7 +500,7 @@ etherscan completion powershell
 
 ## Development
 
-Go 1.25 or newer is required to build the CLI.
+Go 1.26.10 or newer is required to build the CLI.
 
 ```sh
 # Run the Go test suite
