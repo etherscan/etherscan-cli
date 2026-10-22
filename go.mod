@@ -2,8 +2,6 @@ module github.com/etherscan/etherscan-cli
 
 go 1.26.10
 
-toolchain go1.26.10
-
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/charmbracelet/bubbles v1.0.0
